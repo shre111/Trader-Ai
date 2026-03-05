@@ -1,0 +1,37 @@
+# Environment
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# ML Models (binary, regeneratable)
+*.pkl
+models/saved/
+
+# Market Data (TrueData compliance — do NOT upload to GitHub)
+data/historical/
+TD_API_Documents/
+
+# Logs and Results
+logs/
+backtest_results/
+
+# Node.js
+node_modules/
+dashboard/node_modules/
+.next/
+dashboard/.next/
+
+# Claude AI
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
