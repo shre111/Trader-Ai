@@ -1,6 +1,9 @@
 # Trained model artifacts (regenerate with `python main.py train`)
 models/saved/
 
+# Backtest output (regenerate with `python main.py backtest`)
+backtest_results/
+
 # Python
 __pycache__/
 *.pyc

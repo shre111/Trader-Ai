@@ -95,6 +95,34 @@ def run_recommend(risk: str = "balanced"):
         logger.info(f"  BUY  {r['symbol']:<14} {str(r['name'])[:32]:<32} score={r['final_score']:.2f}  ({r['rationale']})")
 
 
+def run_backtest(risk: str = "balanced"):
+    import json
+
+    from backtest.backtest_engine import run_backtest as _bt
+
+    logger.info("=" * 60)
+    logger.info(f"MODE: BACKTEST — {risk} profile (monthly factor-rank vs Nifty)")
+    logger.info("=" * 60)
+    res = _bt(risk_level=risk)
+    logger.info(f"Metrics: {res['metrics']}")
+
+    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "backtest_results")
+    os.makedirs(out_dir, exist_ok=True)
+    eq = res["equity_curve"]
+    payload = {
+        "risk": risk,
+        "metrics": res["metrics"],
+        "equity_curve": [
+            {"date": str(r["date"]), "strategy": round(float(r["strategy"]), 4),
+             "benchmark": round(float(r["benchmark"]), 4)}
+            for _, r in eq.iterrows()
+        ],
+    }
+    with open(os.path.join(out_dir, f"{risk}.json"), "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    logger.info(f"Saved backtest_results/{risk}.json")
+
+
 def _not_yet(mode: str):
     logger.warning(f"Mode '{mode}' is not implemented yet (added in a later PR).")
     sys.exit(2)
@@ -122,6 +150,8 @@ def main():
         run_train()
     elif args.mode == "recommend":
         run_recommend(risk=args.risk)
+    elif args.mode == "backtest":
+        run_backtest(risk=args.risk)
     else:
         _not_yet(args.mode)
 
