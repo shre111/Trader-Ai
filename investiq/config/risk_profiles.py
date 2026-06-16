@@ -57,15 +57,15 @@ class RiskProfile:
 CONSERVATIVE = RiskProfile(
     name="Conservative",
     level=RiskLevel.CONSERVATIVE,
-    buy_threshold=0.70,
+    buy_threshold=0.60,
     hold_threshold=0.50,
-    sell_threshold=0.40,
+    sell_threshold=0.45,
     max_holdings=15,
     max_holding_weight=0.10,
     target_equity_weight=0.40,
     cash_buffer=0.10,
-    max_volatility=0.18,
-    min_sharpe=0.50,
+    max_volatility=0.30,
+    min_sharpe=-0.5,
     rebalance_band=0.05,
 )
 
@@ -73,15 +73,15 @@ CONSERVATIVE = RiskProfile(
 BALANCED = RiskProfile(
     name="Balanced",
     level=RiskLevel.BALANCED,
-    buy_threshold=0.62,
-    hold_threshold=0.45,
-    sell_threshold=0.35,
+    buy_threshold=0.56,
+    hold_threshold=0.46,
+    sell_threshold=0.40,
     max_holdings=12,
     max_holding_weight=0.15,
     target_equity_weight=0.60,
     cash_buffer=0.05,
-    max_volatility=0.25,
-    min_sharpe=0.30,
+    max_volatility=0.45,
+    min_sharpe=-1.0,
     rebalance_band=0.07,
 )
 
@@ -89,15 +89,15 @@ BALANCED = RiskProfile(
 AGGRESSIVE = RiskProfile(
     name="Aggressive",
     level=RiskLevel.AGGRESSIVE,
-    buy_threshold=0.58,
+    buy_threshold=0.52,
     hold_threshold=0.40,
-    sell_threshold=0.30,
+    sell_threshold=0.35,
     max_holdings=8,
     max_holding_weight=0.25,
     target_equity_weight=0.80,
     cash_buffer=0.02,
-    max_volatility=0.40,
-    min_sharpe=0.00,
+    max_volatility=0.75,
+    min_sharpe=-2.5,
     rebalance_band=0.10,
 )
 
