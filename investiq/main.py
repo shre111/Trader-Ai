@@ -56,6 +56,15 @@ def run_mock(load: bool = False, years: float = 4.0):
     logger.info("Mock dataset ready.")
 
 
+def run_ingest(sample: bool = False, period: str = "5y"):
+    from data.ingest import run_ingest as _ingest
+
+    logger.info("=" * 60)
+    logger.info(f"MODE: INGEST — real data ({'sample' if sample else 'full universe'})")
+    logger.info("=" * 60)
+    _ingest(sample=sample, period=period)
+
+
 def _not_yet(mode: str):
     logger.warning(f"Mode '{mode}' is not implemented yet (added in a later PR).")
     sys.exit(2)
@@ -69,10 +78,14 @@ def main():
     )
     parser.add_argument("--load", action="store_true", help="mock: write to the investiq DB")
     parser.add_argument("--years", type=float, default=4.0, help="mock: years of history")
+    parser.add_argument("--sample", action="store_true", help="ingest: small subset for a quick test")
+    parser.add_argument("--period", default="5y", help="ingest: yfinance history period (e.g. 5y, 1mo)")
     args = parser.parse_args()
 
     if args.mode == "mock":
         run_mock(load=args.load, years=args.years)
+    elif args.mode == "ingest":
+        run_ingest(sample=args.sample, period=args.period)
     else:
         _not_yet(args.mode)
 
