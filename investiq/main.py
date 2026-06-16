@@ -65,6 +65,19 @@ def run_ingest(sample: bool = False, period: str = "5y"):
     _ingest(sample=sample, period=period)
 
 
+def run_train():
+    from features.factor_engine import build_features
+    from models.train_model import train
+
+    logger.info("=" * 60)
+    logger.info("MODE: TRAIN — outperformance model")
+    logger.info("=" * 60)
+    logger.info("Rebuilding features ...")
+    build_features(store=True)
+    metrics = train()
+    logger.info(f"Training metrics: {metrics}")
+
+
 def _not_yet(mode: str):
     logger.warning(f"Mode '{mode}' is not implemented yet (added in a later PR).")
     sys.exit(2)
@@ -86,6 +99,8 @@ def main():
         run_mock(load=args.load, years=args.years)
     elif args.mode == "ingest":
         run_ingest(sample=args.sample, period=args.period)
+    elif args.mode == "train":
+        run_train()
     else:
         _not_yet(args.mode)
 
