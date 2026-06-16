@@ -1,0 +1,10 @@
+# Trained model artifacts (regenerate with `python main.py train`)
+models/saved/
+
+# Python
+__pycache__/
+*.pyc
+
+# Local env / venv
+.env
+.venv/
