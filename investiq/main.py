@@ -78,6 +78,23 @@ def run_train():
     logger.info(f"Training metrics: {metrics}")
 
 
+def run_recommend(risk: str = "balanced"):
+    from features.factor_engine import build_features
+    from strategy.recommendation_engine import generate
+
+    logger.info("=" * 60)
+    logger.info(f"MODE: RECOMMEND — {risk} profile")
+    logger.info("=" * 60)
+    build_features(store=True)
+    scored = generate(risk_level=risk, store=True)
+    if scored.empty:
+        return
+    buys = scored[scored["action"] == "BUY"].head(10)
+    logger.info(f"Top BUYs ({len(scored[scored['action'] == 'BUY'])} total):")
+    for _, r in buys.iterrows():
+        logger.info(f"  BUY  {r['symbol']:<14} {str(r['name'])[:32]:<32} score={r['final_score']:.2f}  ({r['rationale']})")
+
+
 def _not_yet(mode: str):
     logger.warning(f"Mode '{mode}' is not implemented yet (added in a later PR).")
     sys.exit(2)
@@ -93,6 +110,8 @@ def main():
     parser.add_argument("--years", type=float, default=4.0, help="mock: years of history")
     parser.add_argument("--sample", action="store_true", help="ingest: small subset for a quick test")
     parser.add_argument("--period", default="5y", help="ingest: yfinance history period (e.g. 5y, 1mo)")
+    parser.add_argument("--risk", default="balanced",
+                        choices=["conservative", "balanced", "aggressive"], help="recommend: risk profile")
     args = parser.parse_args()
 
     if args.mode == "mock":
@@ -101,6 +120,8 @@ def main():
         run_ingest(sample=args.sample, period=args.period)
     elif args.mode == "train":
         run_train()
+    elif args.mode == "recommend":
+        run_recommend(risk=args.risk)
     else:
         _not_yet(args.mode)
 
