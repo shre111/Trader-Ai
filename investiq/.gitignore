@@ -8,6 +8,9 @@ backtest_results/
 __pycache__/
 *.pyc
 
+# Local logs (API / dev servers)
+*.log
+
 # Local env / venv
 .env
 .venv/
