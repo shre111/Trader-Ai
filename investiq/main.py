@@ -123,6 +123,17 @@ def run_backtest(risk: str = "balanced"):
     logger.info(f"Saved backtest_results/{risk}.json")
 
 
+def run_serve(port: int = 5055):
+    from backend.app import app
+    from scheduler.daily_refresh import start_scheduler
+
+    logger.info("=" * 60)
+    logger.info(f"MODE: SERVE — Flask API on http://localhost:{port}")
+    logger.info("=" * 60)
+    start_scheduler()
+    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+
+
 def _not_yet(mode: str):
     logger.warning(f"Mode '{mode}' is not implemented yet (added in a later PR).")
     sys.exit(2)
@@ -140,6 +151,7 @@ def main():
     parser.add_argument("--period", default="5y", help="ingest: yfinance history period (e.g. 5y, 1mo)")
     parser.add_argument("--risk", default="balanced",
                         choices=["conservative", "balanced", "aggressive"], help="recommend: risk profile")
+    parser.add_argument("--port", type=int, default=5055, help="serve: API port")
     args = parser.parse_args()
 
     if args.mode == "mock":
@@ -152,6 +164,8 @@ def main():
         run_recommend(risk=args.risk)
     elif args.mode == "backtest":
         run_backtest(risk=args.risk)
+    elif args.mode == "serve":
+        run_serve(port=args.port)
     else:
         _not_yet(args.mode)
 
