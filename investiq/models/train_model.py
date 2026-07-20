@@ -66,9 +66,21 @@ def attach_labels(feat: pd.DataFrame, forward: int = LABEL_FORWARD_DAYS,
             i = pos.get(pd.Timestamp(row["date"]))
             if i is None or i + forward >= len(valr):
                 continue
-            sec_fwd = valr[i + forward] / valr[i] - 1
             b0, b1 = benr[i], benr[i + forward]
-            ben_fwd = (b1 / b0 - 1) if (b0 and not np.isnan(b0)) else 0.0
+            # The label is "did it BEAT THE BENCHMARK", so it is only defined where the
+            # benchmark actually covers both ends of the forward window. Leave `target`
+            # NaN otherwise — train() drops those rows.
+            #
+            # Previously b1 was unguarded: a NaN there made ben_fwd NaN, and the
+            # comparison `NaN > margin` is False, so the row was silently labelled 0
+            # (underperform) — a +25% winner recorded as a loss. A NaN b0 was just as
+            # bad: `b0 and not isnan(b0)` is False for NaN (NaN is truthy), so the
+            # benchmark was treated as flat 0%, quietly turning the label into the much
+            # easier "did it go up at all".
+            if np.isnan(b0) or np.isnan(b1) or b0 == 0:
+                continue
+            sec_fwd = valr[i + forward] / valr[i] - 1
+            ben_fwd = b1 / b0 - 1
             feat.at[idx, "target"] = 1.0 if (sec_fwd - ben_fwd) > margin else 0.0
 
     return feat
