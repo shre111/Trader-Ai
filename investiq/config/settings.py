@@ -47,6 +47,14 @@ FEATURE_COLUMNS = [
 LABEL_FORWARD_DAYS = int(os.getenv("LABEL_FORWARD_DAYS", "126"))      # ~6 months
 LABEL_OUTPERFORM_MARGIN = float(os.getenv("LABEL_OUTPERFORM_MARGIN", "0.0"))
 
+# ── Freshness guard for live scoring ──────────────────────────────────────────
+# Scores are cross-sectional percentile ranks, so every security in a scoring run
+# must describe the SAME point in time. A security whose data stopped updating
+# (delisted, merged, renamed) would otherwise be ranked on years-old factors
+# against current ones. Features are sampled ~monthly, so allow a little over a
+# month before treating a symbol as stale and excluding it from live scoring.
+MAX_FEATURE_STALENESS_DAYS = int(os.getenv("MAX_FEATURE_STALENESS_DAYS", "45"))
+
 # ── Composite recommendation score weights (sum ≈ 1.0) ────────────────────────
 WEIGHT_ML = float(os.getenv("WEIGHT_ML", "0.45"))
 WEIGHT_FACTOR = float(os.getenv("WEIGHT_FACTOR", "0.25"))

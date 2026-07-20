@@ -19,7 +19,12 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from config.settings import FEATURE_COLUMNS, RISK_FREE_RATE, TRADING_DAYS_PER_YEAR
+from config.settings import (
+    FEATURE_COLUMNS,
+    MAX_FEATURE_STALENESS_DAYS,
+    RISK_FREE_RATE,
+    TRADING_DAYS_PER_YEAR,
+)
 from database.db import read_sql, upsert_rows
 from utils.logger import get_logger
 
@@ -152,8 +157,20 @@ def build_features(symbols: list | None = None, every_n: int = 21, store: bool =
     return out
 
 
-def latest_features(symbols: list | None = None) -> pd.DataFrame:
-    """Most recent feature row per symbol from the `features` table."""
+def latest_features(symbols: list | None = None,
+                    max_staleness_days: int = MAX_FEATURE_STALENESS_DAYS) -> pd.DataFrame:
+    """
+    Most recent feature row per symbol from the `features` table, excluding symbols
+    whose data has gone stale.
+
+    The max(date) join is per-symbol, so a security that stopped updating still
+    returns its last-ever row. Downstream scoring is cross-sectional (percentile
+    ranks across the universe), which silently compares those stale factors against
+    current ones — a fund last seen in 2014 could be ranked, and recommended, today.
+    Drop anything trailing the freshest row by more than `max_staleness_days`.
+
+    Pass max_staleness_days=0 to disable the guard (e.g. historical analysis).
+    """
     df = read_sql(
         """
         SELECT f.* FROM features f
@@ -163,4 +180,16 @@ def latest_features(symbols: list | None = None) -> pd.DataFrame:
     )
     if symbols and not df.empty:
         df = df[df["symbol"].isin(symbols)]
-    return df
+    if df.empty or not max_staleness_days:
+        return df
+
+    dates = pd.to_datetime(df["date"])
+    cutoff = dates.max() - pd.Timedelta(days=max_staleness_days)
+    stale = df[dates < cutoff]
+    if not stale.empty:
+        for _, r in stale.iterrows():
+            logger.warning(
+                f"  {r['symbol']}: features last updated {r['date']} "
+                f"(> {max_staleness_days}d stale) — excluded from scoring"
+            )
+    return df[dates >= cutoff].reset_index(drop=True)
