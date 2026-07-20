@@ -68,12 +68,16 @@ def risk_profiles():
 
 @app.get("/api/refresh/status")
 def refresh_status():
+    from scheduler.daily_refresh import last_run
+
     row = read_sql(
         """SELECT (SELECT max(date) FROM price_history) AS last_price_date,
                   (SELECT max(date) FROM nav_history)  AS last_nav_date,
                   (SELECT max(date) FROM features)     AS last_feature_date"""
     )
-    return jsonify(records(row)[0] if not row.empty else {})
+    out = records(row)[0] if not row.empty else {}
+    out["last_run"] = last_run()  # so a silently failing nightly job is visible
+    return jsonify(out)
 
 
 # ── Universe / recommendations / screener ───────────────────────────────────────
