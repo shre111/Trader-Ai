@@ -123,6 +123,7 @@ def screener():
 
 @app.get("/api/security/<path:symbol>")
 def security_detail(symbol):
+    risk = request.args.get("risk", "balanced")
     sec = read_sql("SELECT * FROM securities WHERE symbol=:s", {"s": symbol})
     if sec.empty:
         return jsonify({"error": "not found"}), 404
@@ -142,7 +143,9 @@ def security_detail(symbol):
         "SELECT * FROM features WHERE symbol=:s ORDER BY date DESC LIMIT 1", {"s": symbol}
     )
     rec = read_sql(
-        "SELECT * FROM recommendations WHERE symbol=:s ORDER BY date DESC LIMIT 1", {"s": symbol}
+        "SELECT * FROM recommendations WHERE symbol=:s AND risk_level=:r "
+        "ORDER BY date DESC LIMIT 1",
+        {"s": symbol, "r": risk},
     )
     fund = read_sql(
         "SELECT * FROM fundamentals WHERE symbol=:s ORDER BY date DESC LIMIT 1", {"s": symbol}
@@ -204,6 +207,7 @@ def portfolio_history():
 # ── Market / backtest ────────────────────────────────────────────────────────────
 @app.get("/api/market/overview")
 def market_overview():
+    risk = request.args.get("risk", "balanced")
     bench = read_sql(
         "SELECT date, close FROM price_history WHERE symbol=:s ORDER BY date DESC LIMIT 22",
         {"s": BENCHMARK_SYMBOL},
@@ -214,13 +218,19 @@ def market_overview():
         if len(bench) > 1:
             chg_1d = last / float(bench["close"].iloc[1]) - 1
         chg_1m = last / float(bench["close"].iloc[-1]) - 1
+    # Scope BOTH the filter and the max(date) subquery to the profile — profiles can
+    # be generated on different dates, and an unscoped max(date) would then return
+    # no rows for the lagging one.
     breadth = read_sql(
-        "SELECT action, count(*) n FROM recommendations "
-        "WHERE date=(SELECT max(date) FROM recommendations) GROUP BY action"
+        "SELECT action, count(*) n FROM recommendations WHERE risk_level=:r "
+        "AND date=(SELECT max(date) FROM recommendations WHERE risk_level=:r) "
+        "GROUP BY action",
+        {"r": risk},
     )
     return jsonify({
         "benchmark": BENCHMARK_SYMBOL, "last": last,
         "change_1d": chg_1d, "change_1m": chg_1m,
+        "risk": risk,
         "breadth": {r["action"]: int(r["n"]) for _, r in breadth.iterrows()},
     })
 
