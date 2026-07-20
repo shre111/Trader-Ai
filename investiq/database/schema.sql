@@ -95,9 +95,13 @@ SELECT create_hypertable('features', 'date',
     chunk_time_interval => INTERVAL '90 days', if_not_exists => TRUE);
 
 -- ── Recommendations (BUY/HOLD/SELL signals) ──────────────────────────────────
+-- risk_level is part of the key: the same security on the same date resolves to a
+-- DIFFERENT action under each risk profile (thresholds and vol/Sharpe gates differ).
+-- Without it, generating all three profiles in turn made each overwrite the last.
 CREATE TABLE IF NOT EXISTS recommendations (
     date           DATE NOT NULL,
     symbol         TEXT NOT NULL,
+    risk_level     TEXT NOT NULL,   -- conservative | balanced | aggressive
     action         TEXT NOT NULL,   -- BUY | HOLD | SELL
     final_score    DOUBLE PRECISION,
     ml_prob        DOUBLE PRECISION,
@@ -107,7 +111,7 @@ CREATE TABLE IF NOT EXISTS recommendations (
     horizon_days   INT,
     rationale      TEXT,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    PRIMARY KEY (date, symbol)
+    PRIMARY KEY (date, symbol, risk_level)
 );
 
 -- ── Paper portfolio: transactions (append-only) ──────────────────────────────
