@@ -21,7 +21,7 @@ from flask_cors import CORS
 from config.risk_profiles import list_profiles
 from config.settings import BENCHMARK_SYMBOL, FEATURE_COLUMNS
 from database.db import read_sql
-from models.predict import Predictor
+from models.predict import get_predictor
 from portfolio.paper_portfolio import PaperPortfolio
 from strategy.recommendation_engine import generate
 from utils.logger import get_logger
@@ -56,7 +56,7 @@ def health():
     ).iloc[0].to_dict()
     return jsonify({
         "status": "ok",
-        "model_loaded": Predictor().is_loaded,
+        "model_loaded": get_predictor().is_loaded,
         "counts": {k: int(v) for k, v in counts.items()},
     })
 
