@@ -87,7 +87,12 @@ class PaperPortfolio:
                 "value": value, "cost": cost, "pnl": value - cost,
                 "pnl_pct": (value / cost - 1) if cost else 0.0,
             })
-        h = pd.DataFrame(rows, columns=[c for c in _HOLD_COLS if c != "weight"])
+        # Always return the full column set. Building without "weight" and adding it
+        # only in the non-empty branch meant that once every position was closed, this
+        # returned a frame missing a column its own _HOLD_COLS contract promises — so
+        # any consumer touching h["weight"] hit a KeyError precisely in the
+        # everything-sold state, which is exactly when it is least expected.
+        h = pd.DataFrame(rows, columns=_HOLD_COLS)
         if not h.empty:
             tv = h["value"].sum()
             h["weight"] = h["value"] / tv if tv else 0.0
