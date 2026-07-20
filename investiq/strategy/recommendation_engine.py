@@ -19,7 +19,7 @@ from config.risk_profiles import RiskLevel, get_risk_profile
 from config.settings import FEATURE_COLUMNS, LABEL_FORWARD_DAYS
 from database.db import read_sql, upsert_rows
 from features.factor_engine import latest_features
-from models.predict import Predictor
+from models.predict import get_predictor
 from strategy.scorer import score_universe
 from utils.logger import get_logger
 
@@ -55,7 +55,7 @@ def generate(risk_level: str = "balanced", held=None, store: bool = True) -> pd.
     lf = lf.merge(secs, on="symbol", how="left")
     lf = lf[lf["sec_type"] != "INDEX"].reset_index(drop=True)  # index isn't directly investable
 
-    probs = Predictor().predict_proba(lf[FEATURE_COLUMNS])
+    probs = get_predictor().predict_proba(lf[FEATURE_COLUMNS])
     scored = score_universe(lf, probs)
 
     def decide(row) -> str:
