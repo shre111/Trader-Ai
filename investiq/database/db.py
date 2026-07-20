@@ -57,9 +57,17 @@ def upsert_rows(
     Insert rows with ON CONFLICT handling, keyed by `conflict_cols`.
 
     update=False → ON CONFLICT DO NOTHING (idempotent backfills)
-    update=True  → ON CONFLICT DO UPDATE all non-key columns (refresh latest values)
+    update=True  → ON CONFLICT DO UPDATE, but ONLY for the columns actually present
+                   in `df` (see below)
 
     Returns the number of affected rows.
+
+    On update we deliberately restrict the SET list to the DataFrame's own columns.
+    Using every table column instead would reference `excluded.<col>` for columns the
+    caller never supplied, and Postgres resolves those to the column DEFAULT — so a
+    partial upsert would silently null out untouched data and, for SERIAL keys,
+    burn a fresh sequence value on every conflict. Callers that pass a subset of
+    columns (e.g. ingest_securities) must not clobber the rest of the row.
     """
     if df is None or df.empty:
         return 0
@@ -69,6 +77,7 @@ def upsert_rows(
     tbl = meta.tables[table]
     rows = df.to_dict(orient="records")
     affected = 0
+    present = set(df.columns)
 
     with engine.begin() as conn:
         for start in range(0, len(rows), chunk_size):
@@ -78,8 +87,14 @@ def upsert_rows(
                 update_cols = {
                     c.name: stmt.excluded[c.name]
                     for c in tbl.columns
-                    if c.name not in conflict_cols
+                    if c.name not in conflict_cols and c.name in present
                 }
+                if not update_cols:
+                    # Nothing to update beyond the key itself — degrade to DO NOTHING
+                    # rather than emitting an invalid empty SET clause.
+                    stmt = stmt.on_conflict_do_nothing(index_elements=conflict_cols)
+                    affected += conn.execute(stmt).rowcount
+                    continue
                 stmt = stmt.on_conflict_do_update(
                     index_elements=conflict_cols, set_=update_cols
                 )
