@@ -22,7 +22,8 @@ export default function Settings() {
         <table>
           <thead><tr>
             <th>Profile</th><th>Buy</th><th>Hold</th><th>Sell</th>
-            <th>Max Holdings</th><th>Max Weight</th><th>Equity Target</th>
+            <th>Max Holdings</th><th>Max Weight</th>
+            <th title="Declared but not yet enforced by the rebalancer">Equity Target *</th>
           </tr></thead>
           <tbody>
             {profiles.map((p) => (
@@ -36,6 +37,10 @@ export default function Settings() {
             ))}
           </tbody>
         </table>
+        <div className="muted" style={{ padding: "0 18px 14px", fontSize: 12 }}>
+          * Equity Target is declared on each profile but not yet enforced by the rebalancer,
+          which currently allocates purely by score rank.
+        </div>
       </div>
 
       <div className="card" style={{ padding: 18 }}>

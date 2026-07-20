@@ -65,9 +65,17 @@ def generate(risk_level: str = "balanced", held=None, store: bool = True) -> pd.
         )
         if row.final_score >= profile.buy_threshold and passes_risk:
             return "HOLD" if row.symbol in held else "BUY"
-        if row.final_score >= profile.hold_threshold:
+        # A name we already own keeps its place while it stays above the hold floor —
+        # that is exactly what hold_threshold documents ("keep an existing holding").
+        if row.symbol in held and row.final_score >= profile.hold_threshold:
             return "HOLD"
-        return "SELL"
+        # Only call SELL below the explicit sell threshold. Previously anything under
+        # hold_threshold was a SELL, which ignored sell_threshold entirely and flagged
+        # merely-unremarkable securities as exits. The band between sell and buy is
+        # neutral: not worth buying, not a reason to sell.
+        if row.final_score < profile.sell_threshold:
+            return "SELL"
+        return "HOLD"
 
     scored["action"] = scored.apply(decide, axis=1)
     scored["rationale"] = scored.apply(_rationale, axis=1)
