@@ -4,7 +4,9 @@ InvestIQ — recommendation engine.
 Scores the latest factor snapshot for every investable security and maps each to a
 BUY / HOLD / SELL action using the active risk profile's thresholds and gates
 (max volatility, min Sharpe). Optionally honors current holdings (held names stay
-HOLD while still above the hold threshold). Persists to the recommendations table.
+HOLD while still above the hold threshold). Persists to the recommendations table,
+keyed by (date, symbol, risk_level) — each profile stores its own row, since the
+same security resolves to a different action under different thresholds.
 """
 
 from __future__ import annotations
@@ -75,6 +77,7 @@ def generate(risk_level: str = "balanced", held=None, store: bool = True) -> pd.
         rec = pd.DataFrame({
             "date": date.today(),
             "symbol": scored["symbol"],
+            "risk_level": risk_level,
             "action": scored["action"],
             "final_score": scored["final_score"].round(4),
             "ml_prob": scored["ml_prob"].round(4),
@@ -84,7 +87,7 @@ def generate(risk_level: str = "balanced", held=None, store: bool = True) -> pd.
             "horizon_days": LABEL_FORWARD_DAYS,
             "rationale": scored["rationale"],
         })
-        upsert_rows(rec, "recommendations", ["date", "symbol"], update=True)
+        upsert_rows(rec, "recommendations", ["date", "symbol", "risk_level"], update=True)
         logger.info(f"Stored {len(rec)} recommendations ({risk_level}).")
 
     return scored
