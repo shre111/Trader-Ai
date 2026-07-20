@@ -13,7 +13,12 @@ Intraday NIFTY options paper-trading system. Collects live ticks, trains XGBoost
 | Database | TimescaleDB (PostgreSQL 17) — hypertables for tick/candle data |
 | ML | XGBoost + LightGBM (scikit-learn pipeline), joblib `.pkl` models |
 | Data Feed | TrueData REST + WebSocket (`wss://push.truedata.in:8084`) |
-| Runtime | macOS, Python venv at `.venv/`, Node in `dashboard/node_modules/` |
+| Runtime | Windows, Python venv at `.venv/` (`.venv/Scripts/python.exe`), Node in `dashboard/node_modules/` |
+
+> **This repo contains two projects.** This file documents **ai-trader** (intraday NIFTY
+> options, root directory). The `investiq/` subdirectory is a **separate** long-term
+> investing advisor with its own stack, database, and ports — see `investiq/README.md`
+> and `investiq/docs/LEARNING.md` for how to run it. The two share nothing but the repo.
 
 ---
 
@@ -74,10 +79,23 @@ ai-trader/
 
 ### Prerequisites
 ```bash
-brew services start postgresql@17   # TimescaleDB must be running
-cd /Users/aaryansinha/Dev/Projects/ai-trader
-source .venv/bin/activate
+# TimescaleDB runs in Docker (start Docker Desktop first):
+docker start aitrader-timescaledb    # container maps host 5440 → 5432
+
+cd c:/aitrader/Trader-Ai
+source .venv/Scripts/activate         # Git Bash; PowerShell: .venv\Scripts\Activate.ps1
 ```
+
+> **Windows notes**
+> - Run Python with `PYTHONUTF8=1` — the code prints `₹` (U+20B9), which cp1252 can't encode.
+> - There is no `nohup`/`&` daemon pattern here; use PowerShell `Start-Process` or a
+>   background task to keep long-running scripts alive.
+> - `/tmp/...` paths below are POSIX-isms from the original macOS setup and have **not**
+>   been verified on this machine.
+>
+> **Unverified:** the ai-trader stack itself (TrueData feed, ports 5050/3000, the `trading`
+> database) has not been run on this machine — it needs paid TrueData credentials. The
+> commands below are inherited from the original macOS setup; treat them as untested here.
 
 ### Backend (Flask API)
 ```bash
