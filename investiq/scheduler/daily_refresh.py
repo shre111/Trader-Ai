@@ -29,6 +29,7 @@ def daily_update():
     """Refresh recent data → rebuild features → regenerate recommendations."""
     from data.ingest import refresh
     from features.factor_engine import build_features
+    from portfolio.paper_portfolio import PaperPortfolio
     from strategy.recommendation_engine import generate
 
     _LAST_RUN.update(started_at=datetime.now().isoformat(), finished_at=None,
@@ -39,6 +40,13 @@ def daily_update():
         build_features(store=True)
         for risk in ("conservative", "balanced", "aggressive"):
             generate(risk_level=risk, store=True)
+        # Record today's portfolio value. `portfolio_snapshots` is described as "daily
+        # value snapshots (equity curve)", but the only caller of snapshot() was
+        # rebalance() — so the curve only ever gained a point when someone manually
+        # rebalanced, and holding steady (the normal case for a long-term portfolio)
+        # produced no history at all. Snapshotting here is what makes it daily.
+        snap = PaperPortfolio().snapshot()
+        logger.info(f"Portfolio snapshot: value {snap['total_value']:.0f}, pnl {snap['pnl']:.0f}")
     except Exception as e:  # noqa: BLE001 - a scheduled job must not kill the server
         # Still swallowed (APScheduler would otherwise drop the job), but recorded at
         # ERROR with a traceback and exposed via last_run(). Previously this was a bare
