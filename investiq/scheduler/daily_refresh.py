@@ -29,6 +29,7 @@ def daily_update():
     """Refresh recent data → rebuild features → regenerate recommendations."""
     from data.ingest import refresh
     from features.factor_engine import build_features
+    from portfolio.paper_portfolio import PaperPortfolio
     from strategy.recommendation_engine import generate
 
     _LAST_RUN.update(started_at=datetime.now().isoformat(), finished_at=None,
@@ -37,8 +38,14 @@ def daily_update():
     try:
         refresh(period="1mo")
         build_features(store=True)
+        # Pass current holdings, exactly as the API does. `generate()` uses `held` to
+        # keep an owned name at HOLD rather than re-issuing BUY; omitting it here meant
+        # the STORED recommendations were computed as if the portfolio were empty, so
+        # they disagreed with the live /api/recommendations response for every holding.
+        held = PaperPortfolio().holdings()
+        held_syms = set(held["symbol"]) if not held.empty else set()
         for risk in ("conservative", "balanced", "aggressive"):
-            generate(risk_level=risk, store=True)
+            generate(risk_level=risk, held=held_syms, store=True)
     except Exception as e:  # noqa: BLE001 - a scheduled job must not kill the server
         # Still swallowed (APScheduler would otherwise drop the job), but recorded at
         # ERROR with a traceback and exposed via last_run(). Previously this was a bare
