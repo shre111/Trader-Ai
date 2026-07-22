@@ -46,6 +46,13 @@ def daily_update():
         held_syms = set(held["symbol"]) if not held.empty else set()
         for risk in ("conservative", "balanced", "aggressive"):
             generate(risk_level=risk, held=held_syms, store=True)
+        # Record today's portfolio value. `portfolio_snapshots` is described as "daily
+        # value snapshots (equity curve)", but the only caller of snapshot() was
+        # rebalance() — so the curve only ever gained a point when someone manually
+        # rebalanced, and holding steady (the normal case for a long-term portfolio)
+        # produced no history at all. Snapshotting here is what makes it daily.
+        snap = PaperPortfolio().snapshot()
+        logger.info(f"Portfolio snapshot: value {snap['total_value']:.0f}, pnl {snap['pnl']:.0f}")
     except Exception as e:  # noqa: BLE001 - a scheduled job must not kill the server
         # Still swallowed (APScheduler would otherwise drop the job), but recorded at
         # ERROR with a traceback and exposed via last_run(). Previously this was a bare
