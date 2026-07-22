@@ -8,7 +8,10 @@ equity curve. Prices are the latest close (equities/indices) or NAV (funds).
 
 from __future__ import annotations
 
+import os
+import time
 from datetime import date
+from threading import Lock
 
 import pandas as pd
 
@@ -22,8 +25,43 @@ logger = get_logger("portfolio")
 _HOLD_COLS = ["symbol", "units", "avg_cost", "price", "value", "cost", "pnl", "pnl_pct", "weight"]
 
 
-def latest_prices() -> dict:
-    """symbol → latest price (close for equities/indices, NAV for funds)."""
+_PRICE_TTL_SECS = float(os.getenv("PRICE_CACHE_TTL_SECS", "60"))
+_price_cache: dict = {"at": 0.0, "prices": None}
+_price_lock = Lock()
+
+
+def latest_prices(max_age_secs: float = _PRICE_TTL_SECS) -> dict:
+    """
+    symbol → latest price (close for equities/indices, NAV for funds), cached briefly.
+
+    Each call runs two GROUP BY scans over price_history (60k rows) and nav_history
+    (75k rows) — ~215ms. `holdings()`, `buy()` and `sell()` each call it, so a single
+    rebalance triggered 20 identical queries (~4.3s of pure repetition), and every
+    /api/recommendations and /api/screener request paid for one via _held_symbols().
+
+    These are end-of-day series that change once a day, so a short TTL is ample and
+    keeps the data fresh enough that an ingest is picked up within a minute. Pass
+    max_age_secs=0 to force a re-read.
+    """
+    now = time.monotonic()
+    with _price_lock:
+        cached = _price_cache["prices"]
+        if cached is not None and max_age_secs and (now - _price_cache["at"]) < max_age_secs:
+            return cached
+
+    prices = _load_latest_prices()
+    with _price_lock:
+        _price_cache.update(at=time.monotonic(), prices=prices)
+    return prices
+
+
+def invalidate_price_cache() -> None:
+    """Drop the cached prices (call after an ingest writes new rows)."""
+    with _price_lock:
+        _price_cache.update(at=0.0, prices=None)
+
+
+def _load_latest_prices() -> dict:
     eq = read_sql(
         """SELECT p.symbol, p.close AS price FROM price_history p
            JOIN (SELECT symbol, max(date) d FROM price_history GROUP BY symbol) m
