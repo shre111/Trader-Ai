@@ -18,7 +18,7 @@ import pandas as pd
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from config.risk_profiles import list_profiles
+from config.risk_profiles import RiskLevel, list_profiles
 from config.settings import BENCHMARK_SYMBOL, FEATURE_COLUMNS
 from database.db import read_sql
 from models.predict import get_predictor
@@ -42,6 +42,40 @@ def records(df: pd.DataFrame) -> list:
 def _security_names() -> dict:
     s = read_sql("SELECT symbol, name FROM securities")
     return dict(zip(s["symbol"], s["name"]))
+
+
+class BadRequest(Exception):
+    """A client supplied an invalid parameter."""
+
+
+@app.errorhandler(BadRequest)
+def _bad_request(e):
+    return jsonify({"error": str(e)}), 400
+
+
+_VALID_RISK = {lvl.value for lvl in RiskLevel}
+
+
+def _risk_arg(default: str = "balanced") -> str:
+    """
+    Read and validate the `risk` query parameter against the RiskLevel enum.
+
+    Every caller previously passed this string through unchecked, which was wrong in
+    three different ways:
+      - `generate()` feeds it to RiskLevel(...), so a bad value raised ValueError and
+        surfaced as an opaque 500 instead of a 400;
+      - /api/market/overview interpolated it into a SQL filter, so a bad value quietly
+        returned empty breadth — a wrong answer rather than an error;
+      - /api/backtest joined it into a FILE PATH, so `?risk=../../<path>` escaped the
+        results directory and read arbitrary .json files off disk.
+    Whitelisting against the enum closes all three.
+    """
+    risk = request.args.get("risk", default)
+    if risk not in _VALID_RISK:
+        raise BadRequest(
+            f"invalid risk '{risk}' — expected one of {sorted(_VALID_RISK)}"
+        )
+    return risk
 
 
 # ── System ────────────────────────────────────────────────────────────────────
@@ -97,7 +131,7 @@ def _held_symbols() -> set:
 
 @app.get("/api/recommendations")
 def recommendations():
-    risk = request.args.get("risk", "balanced")
+    risk = _risk_arg()
     scored = generate(risk_level=risk, held=_held_symbols(), store=False)
     if scored.empty:
         return jsonify([])
@@ -109,7 +143,7 @@ def recommendations():
 @app.get("/api/screener")
 def screener():
     """Full scored universe with optional filters (sec_type, action, min_score)."""
-    risk = request.args.get("risk", "balanced")
+    risk = _risk_arg()
     scored = generate(risk_level=risk, held=_held_symbols(), store=False)
     if scored.empty:
         return jsonify([])
@@ -127,7 +161,7 @@ def screener():
 
 @app.get("/api/security/<path:symbol>")
 def security_detail(symbol):
-    risk = request.args.get("risk", "balanced")
+    risk = _risk_arg()
     sec = read_sql("SELECT * FROM securities WHERE symbol=:s", {"s": symbol})
     if sec.empty:
         return jsonify({"error": "not found"}), 404
@@ -195,6 +229,8 @@ def portfolio_rebalance():
     from portfolio.rebalancer import rebalance
 
     risk = (request.get_json(silent=True) or {}).get("risk") or request.args.get("risk", "balanced")
+    if risk not in _VALID_RISK:
+        raise BadRequest(f"invalid risk '{risk}' — expected one of {sorted(_VALID_RISK)}")
     summary = {k: (float(v) if isinstance(v, float) else v) for k, v in rebalance(risk).items()}
     return jsonify({"ok": True, "summary": summary})
 
@@ -211,7 +247,7 @@ def portfolio_history():
 # ── Market / backtest ────────────────────────────────────────────────────────────
 @app.get("/api/market/overview")
 def market_overview():
-    risk = request.args.get("risk", "balanced")
+    risk = _risk_arg()
     bench = read_sql(
         "SELECT date, close FROM price_history WHERE symbol=:s ORDER BY date DESC LIMIT 22",
         {"s": BENCHMARK_SYMBOL},
@@ -241,7 +277,7 @@ def market_overview():
 
 @app.get("/api/backtest")
 def backtest():
-    risk = request.args.get("risk", "balanced")
+    risk = _risk_arg()
     path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "backtest_results", f"{risk}.json")
     if os.path.exists(path):
