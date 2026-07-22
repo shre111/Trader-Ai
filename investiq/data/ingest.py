@@ -104,6 +104,11 @@ def run_ingest(sample: bool = False, period: str = "5y") -> dict:
     logger.info(f"Ingesting {len(funds)} mutual funds ...")
     nc = ingest_funds(funds)
 
+    # New rows landed, so any cached price snapshot is now out of date.
+    from portfolio.paper_portfolio import invalidate_price_cache
+
+    invalidate_price_cache()
+
     logger.info(f"Ingest complete: +{pc} price rows, +{nc} NAV rows")
     return {"price_rows": pc, "nav_rows": nc}
 
