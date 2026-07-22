@@ -9,6 +9,7 @@ Run: python main.py serve   (or python backend/app.py)
 """
 
 import json
+from datetime import datetime
 import os
 import sys
 
@@ -208,6 +209,26 @@ def portfolio_history():
     return jsonify(records(df))
 
 
+def _cache_is_stale(path: str) -> bool:
+    """
+    True when the cached backtest predates the newest feature row.
+
+    A backtest is a pure function of the `features` table plus price history, so the
+    max feature date is the right invalidation signal: any refresh that adds data
+    makes an earlier run obsolete. Fails closed (treats the cache as stale) if the
+    check itself errors, so a DB hiccup yields a fresh compute rather than stale data.
+    """
+    try:
+        newest = read_sql("SELECT max(date) AS d FROM features")["d"].iloc[0]
+        if newest is None:
+            return False
+        cached_at = datetime.fromtimestamp(os.path.getmtime(path)).date()
+        return cached_at <= pd.Timestamp(newest).date()
+    except Exception as e:  # noqa: BLE001 - never let cache checking break the route
+        logger.warning(f"Backtest cache staleness check failed ({e}) — recomputing.")
+        return True
+
+
 # ── Market / backtest ────────────────────────────────────────────────────────────
 @app.get("/api/market/overview")
 def market_overview():
@@ -244,14 +265,31 @@ def backtest():
     risk = request.args.get("risk", "balanced")
     path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "backtest_results", f"{risk}.json")
-    if os.path.exists(path):
+
+    # Serve the cached run only while it is newer than the newest feature row it was
+    # computed from. The previous `if os.path.exists(path)` had no invalidation at
+    # all: once main.py wrote balanced.json it was served verbatim forever, while
+    # profiles with no cache file recomputed fresh on every call — so the same
+    # endpoint was simultaneously permanently stale for one profile and live for the
+    # others, with no way to tell which you were looking at.
+    if os.path.exists(path) and not _cache_is_stale(path):
         with open(path, encoding="utf-8") as f:
-            return jsonify(json.load(f))
-    # compute on demand if not cached
+            payload = json.load(f)
+        payload["cached"] = True
+        return jsonify(payload)
+
     from backtest.backtest_engine import run_backtest
 
     res = run_backtest(risk_level=risk)
-    return jsonify({"risk": risk, "metrics": res["metrics"], "equity_curve": records(res["equity_curve"])})
+    payload = {"risk": risk, "metrics": res["metrics"],
+               "equity_curve": records(res["equity_curve"]), "cached": False}
+    try:  # refresh the cache so the next request is cheap
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+    except OSError as e:  # a read-only deploy must still serve the response
+        logger.warning(f"Could not write backtest cache {path}: {e}")
+    return jsonify(payload)
 
 
 if __name__ == "__main__":
