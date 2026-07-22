@@ -9,6 +9,7 @@ Run: python main.py serve   (or python backend/app.py)
 """
 
 import json
+from datetime import datetime
 import os
 import sys
 
@@ -18,7 +19,7 @@ import pandas as pd
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from config.risk_profiles import list_profiles
+from config.risk_profiles import RiskLevel, list_profiles
 from config.settings import BENCHMARK_SYMBOL, FEATURE_COLUMNS
 from database.db import read_sql
 from models.predict import get_predictor
@@ -42,6 +43,40 @@ def records(df: pd.DataFrame) -> list:
 def _security_names() -> dict:
     s = read_sql("SELECT symbol, name FROM securities")
     return dict(zip(s["symbol"], s["name"]))
+
+
+class BadRequest(Exception):
+    """A client supplied an invalid parameter."""
+
+
+@app.errorhandler(BadRequest)
+def _bad_request(e):
+    return jsonify({"error": str(e)}), 400
+
+
+_VALID_RISK = {lvl.value for lvl in RiskLevel}
+
+
+def _risk_arg(default: str = "balanced") -> str:
+    """
+    Read and validate the `risk` query parameter against the RiskLevel enum.
+
+    Every caller previously passed this string through unchecked, which was wrong in
+    three different ways:
+      - `generate()` feeds it to RiskLevel(...), so a bad value raised ValueError and
+        surfaced as an opaque 500 instead of a 400;
+      - /api/market/overview interpolated it into a SQL filter, so a bad value quietly
+        returned empty breadth — a wrong answer rather than an error;
+      - /api/backtest joined it into a FILE PATH, so `?risk=../../<path>` escaped the
+        results directory and read arbitrary .json files off disk.
+    Whitelisting against the enum closes all three.
+    """
+    risk = request.args.get("risk", default)
+    if risk not in _VALID_RISK:
+        raise BadRequest(
+            f"invalid risk '{risk}' — expected one of {sorted(_VALID_RISK)}"
+        )
+    return risk
 
 
 # ── System ────────────────────────────────────────────────────────────────────
@@ -97,7 +132,7 @@ def _held_symbols() -> set:
 
 @app.get("/api/recommendations")
 def recommendations():
-    risk = request.args.get("risk", "balanced")
+    risk = _risk_arg()
     scored = generate(risk_level=risk, held=_held_symbols(), store=False)
     if scored.empty:
         return jsonify([])
@@ -109,7 +144,7 @@ def recommendations():
 @app.get("/api/screener")
 def screener():
     """Full scored universe with optional filters (sec_type, action, min_score)."""
-    risk = request.args.get("risk", "balanced")
+    risk = _risk_arg()
     scored = generate(risk_level=risk, held=_held_symbols(), store=False)
     if scored.empty:
         return jsonify([])
@@ -127,7 +162,7 @@ def screener():
 
 @app.get("/api/security/<path:symbol>")
 def security_detail(symbol):
-    risk = request.args.get("risk", "balanced")
+    risk = _risk_arg()
     sec = read_sql("SELECT * FROM securities WHERE symbol=:s", {"s": symbol})
     if sec.empty:
         return jsonify({"error": "not found"}), 404
@@ -195,6 +230,8 @@ def portfolio_rebalance():
     from portfolio.rebalancer import rebalance
 
     risk = (request.get_json(silent=True) or {}).get("risk") or request.args.get("risk", "balanced")
+    if risk not in _VALID_RISK:
+        raise BadRequest(f"invalid risk '{risk}' — expected one of {sorted(_VALID_RISK)}")
     summary = {k: (float(v) if isinstance(v, float) else v) for k, v in rebalance(risk).items()}
     return jsonify({"ok": True, "summary": summary})
 
@@ -208,10 +245,30 @@ def portfolio_history():
     return jsonify(records(df))
 
 
+def _cache_is_stale(path: str) -> bool:
+    """
+    True when the cached backtest predates the newest feature row.
+
+    A backtest is a pure function of the `features` table plus price history, so the
+    max feature date is the right invalidation signal: any refresh that adds data
+    makes an earlier run obsolete. Fails closed (treats the cache as stale) if the
+    check itself errors, so a DB hiccup yields a fresh compute rather than stale data.
+    """
+    try:
+        newest = read_sql("SELECT max(date) AS d FROM features")["d"].iloc[0]
+        if newest is None:
+            return False
+        cached_at = datetime.fromtimestamp(os.path.getmtime(path)).date()
+        return cached_at <= pd.Timestamp(newest).date()
+    except Exception as e:  # noqa: BLE001 - never let cache checking break the route
+        logger.warning(f"Backtest cache staleness check failed ({e}) — recomputing.")
+        return True
+
+
 # ── Market / backtest ────────────────────────────────────────────────────────────
 @app.get("/api/market/overview")
 def market_overview():
-    risk = request.args.get("risk", "balanced")
+    risk = _risk_arg()
     bench = read_sql(
         "SELECT date, close FROM price_history WHERE symbol=:s ORDER BY date DESC LIMIT 22",
         {"s": BENCHMARK_SYMBOL},
@@ -241,17 +298,34 @@ def market_overview():
 
 @app.get("/api/backtest")
 def backtest():
-    risk = request.args.get("risk", "balanced")
+    risk = _risk_arg()
     path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                         "backtest_results", f"{risk}.json")
-    if os.path.exists(path):
+
+    # Serve the cached run only while it is newer than the newest feature row it was
+    # computed from. The previous `if os.path.exists(path)` had no invalidation at
+    # all: once main.py wrote balanced.json it was served verbatim forever, while
+    # profiles with no cache file recomputed fresh on every call — so the same
+    # endpoint was simultaneously permanently stale for one profile and live for the
+    # others, with no way to tell which you were looking at.
+    if os.path.exists(path) and not _cache_is_stale(path):
         with open(path, encoding="utf-8") as f:
-            return jsonify(json.load(f))
-    # compute on demand if not cached
+            payload = json.load(f)
+        payload["cached"] = True
+        return jsonify(payload)
+
     from backtest.backtest_engine import run_backtest
 
     res = run_backtest(risk_level=risk)
-    return jsonify({"risk": risk, "metrics": res["metrics"], "equity_curve": records(res["equity_curve"])})
+    payload = {"risk": risk, "metrics": res["metrics"],
+               "equity_curve": records(res["equity_curve"]), "cached": False}
+    try:  # refresh the cache so the next request is cheap
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, indent=2)
+    except OSError as e:  # a read-only deploy must still serve the response
+        logger.warning(f"Could not write backtest cache {path}: {e}")
+    return jsonify(payload)
 
 
 if __name__ == "__main__":

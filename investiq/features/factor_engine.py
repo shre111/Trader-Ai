@@ -36,7 +36,19 @@ _FUND_COLS = ["pe", "pb", "roe", "debt_equity", "div_yield"]
 
 
 def _load_value_series(symbol: str, sec_type: str, scheme_code) -> pd.Series | None:
-    """Load a daily value series (NAV for MFs, close for equities/indices)."""
+    """
+    Load a daily value series on a consistent TOTAL-RETURN basis.
+
+    Mutual funds: Growth-plan NAV already reinvests income, so it is total return.
+    Equities/indices: use `adj_close` (dividend-adjusted), falling back to `close`
+    only where the adjusted value is missing.
+
+    Using raw `close` here compared funds on a total-return basis against equities on
+    a price-only basis — a systematic bias against dividend payers in what is a purely
+    cross-sectional ranking. Over the stored window COALINDIA returned 318% on a total
+    -return basis but only 176% on price alone; ONGC 169% vs 97%. Those gaps flow
+    straight into ret_*/cagr/sharpe/alpha and therefore into the factor ranks.
+    """
     if sec_type == "MF":
         df = read_sql(
             "SELECT date, nav AS val FROM nav_history WHERE scheme_code=:c ORDER BY date",
@@ -44,7 +56,8 @@ def _load_value_series(symbol: str, sec_type: str, scheme_code) -> pd.Series | N
         )
     else:
         df = read_sql(
-            "SELECT date, close AS val FROM price_history WHERE symbol=:s ORDER BY date",
+            "SELECT date, COALESCE(adj_close, close) AS val FROM price_history "
+            "WHERE symbol=:s ORDER BY date",
             {"s": symbol},
         )
     if df.empty:

@@ -38,8 +38,14 @@ def daily_update():
     try:
         refresh(period="1mo")
         build_features(store=True)
+        # Pass current holdings, exactly as the API does. `generate()` uses `held` to
+        # keep an owned name at HOLD rather than re-issuing BUY; omitting it here meant
+        # the STORED recommendations were computed as if the portfolio were empty, so
+        # they disagreed with the live /api/recommendations response for every holding.
+        held = PaperPortfolio().holdings()
+        held_syms = set(held["symbol"]) if not held.empty else set()
         for risk in ("conservative", "balanced", "aggressive"):
-            generate(risk_level=risk, store=True)
+            generate(risk_level=risk, held=held_syms, store=True)
         # Record today's portfolio value. `portfolio_snapshots` is described as "daily
         # value snapshots (equity curve)", but the only caller of snapshot() was
         # rebalance() — so the curve only ever gained a point when someone manually
