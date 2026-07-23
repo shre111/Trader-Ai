@@ -31,10 +31,23 @@ async function fetchJSON<T>(path: string): Promise<T> {
   if (!r.ok) throw new Error(`${path}: ${r.status}`);
   return r.json();
 }
+// Mirrors fetchJSON's error handling. Without the `r.ok` check a failed buy / sell /
+// rebalance resolved successfully with the server's error body, so the UI reloaded,
+// showed unchanged numbers, and reported nothing — the action silently did nothing.
+// Surfaces the server's `error` message when it sends one (e.g. a 400 from the risk
+// validator) so the caller can show something better than a bare status code.
 async function postJSON<T>(path: string, body: unknown): Promise<T> {
   const r = await fetch(path, {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
+  if (!r.ok) {
+    let detail = `${r.status}`;
+    try {
+      const e = await r.json();
+      if (e?.error) detail = e.error;
+    } catch { /* non-JSON error body — keep the status code */ }
+    throw new Error(`${path}: ${detail}`);
+  }
   return r.json();
 }
 

@@ -10,6 +10,7 @@ export default function Portfolio() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [risk, setRisk] = useState<RiskLevel>("balanced");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const p = await api.portfolio();
@@ -17,8 +18,19 @@ export default function Portfolio() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const rebalance = async () => { setBusy(true); await api.rebalance(risk); await load(); setBusy(false); };
-  const sell = async (sym: string) => { await api.sell(sym, 1); await load(); };
+  // These mutate the portfolio, so a failure must be visible rather than leaving the
+  // user looking at unchanged numbers with no indication the action did nothing.
+  const rebalance = async () => {
+    setBusy(true); setError(null);
+    try { await api.rebalance(risk); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : "Rebalance failed"); }
+    finally { setBusy(false); }
+  };
+  const sell = async (sym: string) => {
+    setError(null);
+    try { await api.sell(sym, 1); await load(); }
+    catch (e) { setError(e instanceof Error ? e.message : `Could not sell ${sym}`); }
+  };
 
   return (
     <>
@@ -32,6 +44,13 @@ export default function Portfolio() {
           <button className="btn btn-primary" onClick={rebalance} disabled={busy}>{busy ? "Rebalancing…" : "Rebalance"}</button>
         </div>
       } />
+
+      {error && (
+        <div className="card" role="alert" style={{ padding: "12px 16px", marginBottom: 16, borderColor: "var(--neg, #c0392b)" }}>
+          <strong style={{ color: "var(--neg, #c0392b)" }}>Action failed:</strong>{" "}
+          <span className="muted">{error}</span>
+        </div>
+      )}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 14, marginBottom: 16 }}>
         <StatCard label="Total Value" value={inr(summary?.total_value)} />

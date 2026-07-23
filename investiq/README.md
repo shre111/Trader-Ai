@@ -28,4 +28,40 @@ investiq/
 └── main.py      modes: mock | ingest | train | backtest | recommend | serve
 ```
 
-This scaffold ships the `config/` + `utils/` foundation only.
+## Screenshots
+
+Live captures of the InvestIQ dashboard (Next.js on `:3001`, backed by the Flask API on `:5055`)
+running against the seeded universe.
+
+### Dashboard — portfolio value, strategy-vs-Nifty curve, market signal & top picks
+![Dashboard](screenshots/01-dashboard.png)
+
+### Recommendations — ranked BUY/HOLD/SELL with ML probability and rationale
+![Recommendations](screenshots/02-ideas.png)
+
+### Screener — full scored universe with risk-profile and filter controls
+![Screener](screenshots/03-screener.png)
+
+### Portfolio — holdings, P&L, weights and one-click rebalance
+![Portfolio](screenshots/04-portfolio.png)
+
+### Backtest — monthly-rebalanced factor strategy vs Nifty (CAGR, alpha, Sharpe, drawdown)
+![Backtest](screenshots/05-backtest.png)
+
+### Security detail — price history, factor breakdown and paper-trade entry
+![Security detail](screenshots/06-security-detail.png)
+
+### Settings — risk-profile thresholds and system status
+![Settings](screenshots/07-settings.png)
+
+## How to run
+
+See [`docs/LEARNING.md`](docs/LEARNING.md#14-how-to-run--operate-it) for the full setup. In short
+(from `investiq/`, with the TimescaleDB container up on host port 5440):
+
+```bash
+PYTHONUTF8=1 <python> main.py ingest      # pull the universe from free sources
+PYTHONUTF8=1 <python> main.py train       # build features + train the model
+PYTHONUTF8=1 <python> backend/app.py      # Flask API on :5055 (+ daily scheduler)
+cd frontend && npm install && npm run dev -- -p 3001   # dashboard on :3001
+```
