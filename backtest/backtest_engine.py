@@ -33,6 +33,8 @@ from config.settings import (
     WEIGHT_ML_PROBABILITY,
     WEIGHT_OPTIONS_FLOW,
     WEIGHT_TECHNICAL_STRENGTH,
+    OPTION_HALF_SPREAD_PCT,
+    COMMISSION_PER_ORDER,
 )
 from strategy.signal_generator import generate_signals, Signal
 from utils.logger import get_logger
@@ -238,8 +240,11 @@ class BacktestEngine:
         sl_multiplier: float = 1.5,
         target_multiplier: float = 2.0,
         max_holding_periods: int = 30,
-        slippage_pct: float = 0.0005,
-        commission_per_order: float = 20.0,
+        # Was hardcoded to 0.0005, i.e. 6x cheaper than the tick-replay engine's
+        # 0.003 half-spread. Both now default to the shared constant in
+        # config.settings so results from the two engines are comparable.
+        slippage_pct: float = OPTION_HALF_SPREAD_PCT,
+        commission_per_order: float = COMMISSION_PER_ORDER,
         lot_size: int = 65,              # NIFTY lot size (65 since Jan 2026)
         atm_delta: float = 0.5,          # ATM option delta for PnL modeling
     ):
@@ -250,7 +255,7 @@ class BacktestEngine:
         self.sl_multiplier = sl_multiplier
         self.target_multiplier = target_multiplier
         self.max_holding_periods = max_holding_periods
-        self.slippage_pct = slippage_pct          # 0.05% default slippage per side
+        self.slippage_pct = slippage_pct          # half-spread per side (paid on entry AND exit)
         self.commission_per_order = commission_per_order  # ₹20 per order (entry+exit = ₹40)
         self.lot_size = lot_size
         self.atm_delta = atm_delta

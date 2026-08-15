@@ -139,6 +139,25 @@ FEATURE_COLUMNS_MICRO = [
     "volume_burst", "tick_momentum",
 ]
 
+# ── Transaction Costs ─────────────────────────────────────────────────────────
+# Single source of truth for both backtest engines.
+#
+# These disagreed by 6x: backtest/backtest_engine.py defaulted to
+# slippage_pct=0.0005 (0.05% per side, 0.1% round trip) while
+# scripts/tick_replay_backtest.py used HALF_SPREAD_PCT=0.003 (0.3% per side,
+# 0.6% round trip). Any P&L comparison between the two was meaningless, and the
+# optimistic engine flattered results it had no business flattering.
+#
+# 0.3% per side is the realistic figure and is what the tick-replay baseline
+# (the engine the tuning decisions were made against) has always used: NIFTY ATM
+# options quote a ~Rs 0.15-0.30 spread on a Rs 40-100 premium. Entry pays the
+# ask, exit receives the bid.
+OPTION_HALF_SPREAD_PCT = float(os.getenv("OPTION_HALF_SPREAD_PCT", "0.003"))
+
+# Brokerage per order. Entry + exit = 2 orders per round trip.
+COMMISSION_PER_ORDER = float(os.getenv("COMMISSION_PER_ORDER", "20.0"))
+COMMISSION_ROUND_TRIP = COMMISSION_PER_ORDER * 2
+
 # ── Trade Scoring Weights ─────────────────────────────────────────────────────
 WEIGHT_ML_PROBABILITY = 0.50
 WEIGHT_OPTIONS_FLOW = 0.30
