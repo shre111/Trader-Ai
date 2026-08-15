@@ -269,11 +269,25 @@ python scripts/incremental_train.py
 
 ## Risk Profiles
 
-| Profile | Score Threshold (CALL/PUT) | SL | Target | Max Trades/Day | Afternoon Cut |
-|---|---|---|---|---|---|
-| LOW (Conservative) | 0.70 / 0.80 | 20% | 35% | 3 | 11:45 IST |
-| MEDIUM (Balanced) | 0.60 / 0.70 | 20% | 50% | 5 | 12:30 IST |
-| HIGH (Aggressive) | 0.58 / 0.65 | 20% | 80% | 8 | 13:15 IST |
+**`config/risk_profiles.py` is the source of truth.** Values below were read
+back from it — every row in the previous version of this table was wrong.
+
+| Profile | Score Threshold (CALL/PUT) | SL | Target | Max Trades/Day | Afternoon Cut | Max Premium | Capital/Trade |
+|---|---|---|---|---|---|---|---|
+| LOW (Conservative) | 0.70 / 0.78 | 15% | 50% | 3 | 12:00 IST | ₹200 | 0.8% |
+| MEDIUM (Balanced) | 0.60 / 0.70 | 15% | 55% | 5 | 12:45 IST | ₹250 | 1.0% |
+| HIGH (Aggressive) | 0.60 / 0.70 | 15% | 55% | 5 | 12:45 IST | ₹250 | 1.2% |
+
+> **HIGH and MEDIUM are now identical on every signal filter** — same
+> thresholds, same trade cap, same afternoon cut, same premium cap. They differ
+> only in `max_capital_per_trade` (0.010 → 0.012) and their regime lot multipliers.
+> This is the result of successive tuning reverts documented in the file's own
+> comments, not an oversight, but it means "switch to HIGH" changes position
+> size only — it does **not** loosen entry selectivity. If you want HIGH to be
+> genuinely more aggressive, its thresholds have to be re-separated deliberately.
+
+The live scanner's profile is set by `LIVE_RISK_LEVEL` (default `medium`) and
+readable/switchable at `GET|POST /api/risk/active`.
 
 NIFTY lot size = 65 units. Suggestion SL/target in `backend/app.py`:
 ```python
