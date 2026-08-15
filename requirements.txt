@@ -1,7 +1,14 @@
+# Install:  pip install -r requirements.txt
+# Verified against the actual import graph (AST scan of all .py files).
+
 # Core
 pandas>=2.0
 numpy>=1.24
 python-dotenv>=1.0
+
+# Backend API (backend/app.py)
+flask>=3.0
+flask-cors>=4.0
 
 # Database
 sqlalchemy>=2.0
@@ -27,7 +34,15 @@ requests>=2.31
 # News / Sentiment
 beautifulsoup4>=4.12
 python-dateutil>=2.8
-torch>=2.0
 
 # Logging / Utils
 colorama>=0.4
+
+# ── Optional ─────────────────────────────────────────────────────────────────
+# torch is only needed for the experimental DQN exit agent
+# (models/dqn_exit_agent.py, scripts/train_dqn_exit.py). backend/app.py imports
+# it lazily inside a try/except, so the system runs fine without it — the
+# /api/rl/status route just omits the "dqn" key. It was previously listed
+# unconditionally under "News / Sentiment", which is not what uses it, and it
+# pulls ~2GB. Install it explicitly if you want the DQN agent:
+#   pip install "torch>=2.0"
