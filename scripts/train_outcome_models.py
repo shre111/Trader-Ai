@@ -336,11 +336,13 @@ def main():
         c for c in available_features
         if joined[c].notna().any() and not np.isinf(joined[c].replace([np.inf, -np.inf], np.nan)).all()
     ]
+    # ffill only. bfill here filled an earlier trade's missing features from a
+    # LATER trade's row, i.e. from outcomes that had not occurred yet at entry
+    # time. Rows still NaN after ffill are dropped by the .dropna() below.
     joined[available_features] = (
         joined[available_features]
         .replace([np.inf, -np.inf], np.nan)
         .ffill()
-        .bfill()
     )
 
     print(f"\n  Feature columns available: {len(available_features)}")

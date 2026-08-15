@@ -169,7 +169,9 @@ def train_strategy_model(
     # Select features
     available = [c for c in FEATURE_COLUMNS_MACRO if c in df.columns]
     non_null = [c for c in available if df[c].notna().any()]
-    df[non_null] = df[non_null].replace([np.inf, -np.inf], np.nan).ffill().bfill()
+    # ffill only — bfill would pull future bars backward into the warmup window.
+    # See MacroModelTrainer.prepare_data in models/train_model.py.
+    df[non_null] = df[non_null].replace([np.inf, -np.inf], np.nan).ffill()
     df = df.dropna(subset=non_null + ["target"])
 
     if len(df) < 50:
