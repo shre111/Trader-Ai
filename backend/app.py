@@ -25,6 +25,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from dotenv import load_dotenv
 load_dotenv()
 
+import hmac
+from functools import wraps
+
 import numpy as np
 import pandas as pd
 from flask import Flask, render_template_string, jsonify, request
@@ -46,7 +49,51 @@ from utils.logger import get_logger
 logger = get_logger("dashboard")
 
 app = Flask(__name__)
-CORS(app)  # Allow Next.js dev server on :3000
+
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# Bare CORS(app) allowed ANY origin to call this API. Since the browser attaches
+# the request automatically, any page the user visited could POST to
+# localhost:5050 — including /api/broker/* which routes to a real broker.
+# Restrict to the dashboard origins; override via DASHBOARD_ORIGINS (CSV).
+ALLOWED_ORIGINS = [
+    o.strip() for o in os.getenv(
+        "DASHBOARD_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000",
+    ).split(",") if o.strip()
+]
+CORS(app, origins=ALLOWED_ORIGINS, supports_credentials=True)
+
+# ── Broker route auth ─────────────────────────────────────────────────────────
+# Routes under /api/broker/ can place, confirm and exit REAL orders. They now
+# require a shared secret in the X-Broker-Token header (or ?token= query param).
+# Set BROKER_API_TOKEN in .env; if unset, these routes are disabled entirely
+# rather than left open — fail closed, not open.
+BROKER_API_TOKEN = os.getenv("BROKER_API_TOKEN", "")
+
+
+def require_broker_token(fn):
+    """Guard for routes that can move real money."""
+    @wraps(fn)
+    def _wrapped(*args, **kwargs):
+        if not BROKER_API_TOKEN:
+            logger.warning(
+                f"Blocked {request.path}: BROKER_API_TOKEN is not set. "
+                f"Set it in .env to enable broker endpoints."
+            )
+            return jsonify({
+                "error": "broker endpoints disabled",
+                "detail": "BROKER_API_TOKEN is not configured on the server",
+            }), 503
+
+        supplied = request.headers.get("X-Broker-Token") or request.args.get("token", "")
+        # compare_digest avoids leaking the token length/prefix via timing
+        if not supplied or not hmac.compare_digest(supplied, BROKER_API_TOKEN):
+            logger.warning(f"Blocked {request.path}: invalid or missing broker token")
+            return jsonify({"error": "unauthorized"}), 401
+
+        return fn(*args, **kwargs)
+
+    return _wrapped
 
 # ── Global State ──────────────────────────────────────────────────────────────
 scanner_enabled = True      # Start/stop toggle for the background scanner
@@ -3134,6 +3181,7 @@ def api_broker_status():
 
 
 @app.route("/api/broker/connect", methods=["POST"])
+@require_broker_token
 def api_broker_connect():
     """Authenticate with the configured broker."""
     ok = order_manager.connect()
@@ -3151,6 +3199,7 @@ def api_broker_login_url():
 
 
 @app.route("/api/broker/auth/callback", methods=["POST"])
+@require_broker_token
 def api_broker_auth_callback():
     """Complete OAuth flow with request_token (step 3)."""
     from broker.zerodha_adapter import ZerodhaAdapter
@@ -3165,6 +3214,7 @@ def api_broker_auth_callback():
 
 
 @app.route("/api/broker/kill", methods=["POST"])
+@require_broker_token
 def api_broker_kill():
     """EMERGENCY: Kill switch — close all positions, halt trading."""
     result = order_manager.kill_switch()
@@ -3172,6 +3222,7 @@ def api_broker_kill():
 
 
 @app.route("/api/broker/resume", methods=["POST"])
+@require_broker_token
 def api_broker_resume():
     """Resume trading after a halt."""
     result = order_manager.resume()
@@ -3185,6 +3236,7 @@ def api_broker_reconcile():
 
 
 @app.route("/api/broker/confirm", methods=["POST"])
+@require_broker_token
 def api_broker_confirm_signal():
     """Confirm a pending signal (manual confirmation mode)."""
     body = request.get_json(force=True) if request.is_json else {}
@@ -3194,6 +3246,7 @@ def api_broker_confirm_signal():
 
 
 @app.route("/api/broker/reject", methods=["POST"])
+@require_broker_token
 def api_broker_reject_signal():
     """Reject a pending signal (manual confirmation mode)."""
     body = request.get_json(force=True) if request.is_json else {}
@@ -3203,6 +3256,7 @@ def api_broker_reject_signal():
 
 
 @app.route("/api/broker/exit", methods=["POST"])
+@require_broker_token
 def api_broker_exit():
     """Manually exit a specific position by order_id."""
     body = request.get_json(force=True) if request.is_json else {}
@@ -3232,15 +3286,24 @@ if __name__ == "__main__":
     port = int(os.environ.get("PORT") or _default_port)
 
     trade_mode = os.getenv("TRADE_MODE", "paper")
+
+    # Bind loopback by default. 0.0.0.0 exposed an unauthenticated API — one that
+    # can reach a live broker — to every device on the network. Opt in explicitly
+    # via BIND_HOST=0.0.0.0 if you really need LAN access.
+    bind_host = os.getenv("BIND_HOST", "127.0.0.1")
+
     print("\n" + "=" * 50)
     print("  AI Trader Dashboard")
     print(f"  Mode:       {trade_mode.upper()}")
     print(f"  Broker:     {order_manager.adapter.broker_name}")
-    print(f"  Flask API:  http://localhost:{port}")
+    print(f"  Flask API:  http://localhost:{port}  (bind {bind_host})")
     print("  Next.js UI: http://localhost:3000")
     print(f"  SSE Stream: http://localhost:{port}/api/stream")
     print(f"  Kill switch: POST http://localhost:{port}/api/broker/kill")
+    print(f"  Broker auth: {'ENABLED' if BROKER_API_TOKEN else 'DISABLED (set BROKER_API_TOKEN)'}")
+    if bind_host == "0.0.0.0":
+        print("  WARNING: bound to 0.0.0.0 — API reachable from the network")
     print("  Press Ctrl+C to stop")
     print("=" * 50 + "\n")
 
-    app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
+    app.run(host=bind_host, port=port, debug=False, threaded=True)
