@@ -44,6 +44,9 @@ from config.settings import (
     WEIGHT_ML_PROBABILITY, WEIGHT_OPTIONS_FLOW, WEIGHT_TECHNICAL_STRENGTH,
     SCORE_THRESHOLD, LIVE_CACHE_FILE,
 )
+from config.risk_profiles import (
+    get_active_profile, get_active_risk_level, set_active_risk_level,
+)
 from utils.logger import get_logger
 
 logger = get_logger("dashboard")
@@ -919,9 +922,12 @@ def scan_market():
         # Backtest enforces these windows via SKIP_FIRST_MIN / SKIP_LAST_MIN /
         # AFTERNOON_CUT from the active risk profile. Live was missing them
         # entirely, letting afternoon entries slip through that backtest
-        # would have rejected. MEDIUM profile: afternoon_cut=210 = 12:45 IST.
-        from config.risk_profiles import get_risk_profile as _get_rp_t, RiskLevel as _RL_t
-        _prof = _get_rp_t(_RL_t.MEDIUM)
+        # would have rejected.
+        #
+        # This used to hardcode RiskLevel.MEDIUM, so the live scanner could not
+        # be switched to LOW or HIGH and drifted from whichever profile the
+        # backtest was run under. It now reads the single active profile.
+        _prof = get_active_profile()
         now_ist = datetime.now()
         minutes_from_open = max(0, now_ist.hour * 60 + now_ist.minute - 555)  # 9:15 IST = 555 min
         if minutes_from_open < _prof.skip_first_min:
@@ -1006,10 +1012,11 @@ def scan_market():
             #   0.75-0.80 bucket: 12 trades, 42% WR, +₹1,207
             #   0.80+ bucket:     17 trades, 76% WR, +₹34,718
             # The 0.70-0.75 range adds noise without edge — filter it out.
-            from config.risk_profiles import get_risk_profile as _get_rp, RiskLevel as _RL
             from strategy.regime_detector import MarketRegime
-            _med_profile = _get_rp(_RL.MEDIUM)
-            effective_threshold = max(0.75, SCORE_THRESHOLD, _med_profile.put_score_threshold)
+            # Was hardcoded to MEDIUM; now follows the active profile so the
+            # score floor and the time gate above can never disagree.
+            _active_profile = get_active_profile()
+            effective_threshold = max(0.75, SCORE_THRESHOLD, _active_profile.put_score_threshold)
 
             # Strategy-specific gates (evidence from backtest with real slippage)
             if sig.strategy == "bearish_momentum" and sig.direction == "PUT":
@@ -2771,6 +2778,32 @@ def api_risk_profiles():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/risk/active", methods=["GET", "POST"])
+def api_risk_active():
+    """
+    Get or set the risk profile the LIVE scanner runs.
+
+    GET  -> {"level": "medium", "profile": {...}}
+    POST {"level": "high"} -> switches the scanner to HIGH
+    """
+    if request.method == "POST":
+        body = request.get_json(force=True) if request.is_json else {}
+        level = body.get("level", "")
+        try:
+            set_active_risk_level(level)
+            logger.info(f"Live risk profile switched to {get_active_risk_level().value.upper()}")
+        except ValueError:
+            return jsonify({
+                "error": f"invalid level {level!r}; expected low, medium or high"
+            }), 400
+
+    import dataclasses
+    return jsonify({
+        "level": get_active_risk_level().value,
+        "profile": dataclasses.asdict(get_active_profile()),
+    })
 
 
 @app.route("/api/rl/status")

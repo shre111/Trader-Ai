@@ -252,6 +252,44 @@ def get_risk_profile(level: RiskLevel) -> RiskProfile:
     return _PROFILES[level]
 
 
+# ── Active profile for LIVE scanning ─────────────────────────────────────────
+# The backtest (scripts/tick_replay_backtest.py) selects a profile via
+# apply_risk_profile() and can run all three. Live scanning had no equivalent:
+# backend/app.py hardcoded RiskLevel.MEDIUM in two separate places, so the live
+# profile could not be changed and the two call sites could silently drift
+# apart from each other.
+#
+# This is the single source of truth for the live profile. Default comes from
+# LIVE_RISK_LEVEL in .env; change it at runtime via set_active_risk_level().
+import os as _os
+
+_DEFAULT_LIVE_LEVEL = _os.getenv("LIVE_RISK_LEVEL", "medium").strip().lower()
+try:
+    _active_level: RiskLevel = RiskLevel(_DEFAULT_LIVE_LEVEL)
+except ValueError:
+    _active_level = RiskLevel.MEDIUM
+
+
+def get_active_risk_level() -> RiskLevel:
+    """Risk level the live scanner is currently running."""
+    return _active_level
+
+
+def get_active_profile() -> RiskProfile:
+    """Risk profile the live scanner is currently running."""
+    return _PROFILES[_active_level]
+
+
+def set_active_risk_level(level) -> RiskProfile:
+    """
+    Change the live scanner's risk profile. Accepts a RiskLevel or its string
+    value ("low" / "medium" / "high"). Raises ValueError on anything else.
+    """
+    global _active_level
+    _active_level = level if isinstance(level, RiskLevel) else RiskLevel(str(level).strip().lower())
+    return _PROFILES[_active_level]
+
+
 def list_profiles() -> list:
     """Return all available profiles with summary info."""
     summaries = []
