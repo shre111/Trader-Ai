@@ -1,4 +1,5 @@
 import os
+import tempfile
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -10,6 +11,22 @@ MODEL_DIR = BASE_DIR / os.getenv("MODEL_DIR", "models/saved")
 LOG_DIR = BASE_DIR / os.getenv("LOG_DIR", "logs")
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+# ── Live price cache ──────────────────────────────────────────────────────────
+# Written every ~1s by scripts/collect_ticks.py, read by the Flask tick monitor
+# and SSE stream. This was hardcoded to "/tmp/td_live_prices.json" in four
+# places, which is macOS/Linux-only: on Windows it resolves to C:\tmp\ and the
+# directory is never created, so the write fails silently. Flask then sees a
+# missing/stale cache, _cache_prices_are_fresh() returns False, and the
+# collector gets killed and respawned in a loop.
+#
+# tempfile.gettempdir() resolves correctly on every platform. Override the
+# whole path with LIVE_CACHE_FILE if you want it somewhere specific.
+LIVE_CACHE_FILE = Path(
+    os.getenv("LIVE_CACHE_FILE", "")
+    or Path(tempfile.gettempdir()) / "td_live_prices.json"
+)
+LIVE_CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
 
 # ── Database (TimescaleDB) ─────────────────────────────────────────────────────
 DB_HOST = os.getenv("DB_HOST", "localhost")

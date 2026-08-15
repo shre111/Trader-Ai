@@ -39,7 +39,7 @@ from models.strategy_models import StrategyPredictor
 from backtest.option_resolver import get_nearest_expiry, get_days_to_expiry
 from config.settings import (
     WEIGHT_ML_PROBABILITY, WEIGHT_OPTIONS_FLOW, WEIGHT_TECHNICAL_STRENGTH,
-    SCORE_THRESHOLD,
+    SCORE_THRESHOLD, LIVE_CACHE_FILE,
 )
 from utils.logger import get_logger
 
@@ -227,7 +227,6 @@ TRAIL_ACTIVATE_PCT = 0.10   # Start trailing once profit > 10%
 TRAIL_FACTOR = 0.50         # Trail SL at 50% of max profit
 TGT_PCT = 0.50              # Target at 50% above entry
 COMMISSION = 40.0
-LIVE_CACHE_FILE = "/tmp/td_live_prices.json"
 
 # Background processes
 _tick_monitor_thread = None
@@ -2355,7 +2354,6 @@ def api_paper_positions():
     live_prices: dict = {}
 
     # 1. Try in-memory cache file written by collect_ticks.py every ~1s
-    LIVE_CACHE_FILE = "/tmp/td_live_prices.json"
     cache_age = float("inf")
     try:
         mtime = os.path.getmtime(LIVE_CACHE_FILE)
@@ -2490,7 +2488,6 @@ def api_backtest_journey(risk, trade_idx):
 @app.route("/api/live/prices")
 def api_live_prices():
     """Return the latest tick prices from collect_ticks.py cache file."""
-    LIVE_CACHE_FILE = "/tmp/td_live_prices.json"
     try:
         mtime = os.path.getmtime(LIVE_CACHE_FILE)
         age = time.time() - mtime

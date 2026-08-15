@@ -46,6 +46,7 @@ from config.settings import (
     STRIKE_GAP, ATM_RANGE, MAX_SYMBOLS,
     MARKET_OPEN_HOUR, MARKET_OPEN_MINUTE,
     MARKET_CLOSE_HOUR, MARKET_CLOSE_MINUTE,
+    LIVE_CACHE_FILE,
 )
 from data.truedata_adapter import TrueDataAdapter
 from data.tick_collector import TickCollector
@@ -74,8 +75,9 @@ last_minute: dict = {}     # symbol -> last completed minute timestamp
 running = True
 
 # Live price cache: symbol -> {price, ts} updated on every tick
+# Path comes from config.settings so Flask and the collector can never disagree
+# about where it lives (they previously hardcoded "/tmp/..." separately).
 live_price_cache: dict = {}
-LIVE_CACHE_FILE = Path("/tmp/td_live_prices.json")
 
 # Watchdog: track when we last received a real tick (not a heartbeat)
 last_tick_received_time: float = time.time()
