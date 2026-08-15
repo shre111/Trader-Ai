@@ -40,6 +40,7 @@ from strategy.vol_surface import VolSurfaceModel
 from config.settings import (
     WEIGHT_ML_PROBABILITY, WEIGHT_OPTIONS_FLOW, WEIGHT_TECHNICAL_STRENGTH,
     SCORE_THRESHOLD,
+    OPTION_HALF_SPREAD_PCT, COMMISSION_ROUND_TRIP,
 )
 from features.micro_features import compute_micro_features
 from features.option_chain_features import OptionChainFeatureEngine
@@ -58,7 +59,7 @@ _PROFILE: RiskProfile = get_risk_profile(RiskLevel.MEDIUM)
 BASE_LOT_SIZE   = _PROFILE.base_lot_size
 SL_PCT          = _PROFILE.sl_pct
 TGT_PCT         = _PROFILE.tgt_pct
-COMMISSION      = 40.0       # ₹20/order × 2
+COMMISSION      = COMMISSION_ROUND_TRIP   # ₹20/order × 2
 MAX_HOLD_BARS   = _PROFILE.max_hold_bars
 MAX_TRADES_DAY  = _PROFILE.max_trades_day
 SKIP_FIRST_MIN  = _PROFILE.skip_first_min
@@ -103,7 +104,8 @@ MICRO_MOMENTUM_THRESHOLD = 0.1
 # Entry: pay ask = close * (1 + HALF_SPREAD_PCT)
 # Exit:  receive bid = close * (1 - HALF_SPREAD_PCT)
 # ATM options spread ~₹0.15-0.30 on ₹40-100 premium → ~0.3% each side
-HALF_SPREAD_PCT = 0.003
+# Value now lives in config.settings so backtest_engine.py cannot drift from it.
+HALF_SPREAD_PCT = OPTION_HALF_SPREAD_PCT
 
 
 def apply_risk_profile(level: RiskLevel):
