@@ -252,10 +252,29 @@ class MacroModelTrainer:
             logger.info(f"Dropping all-NaN features: {dropped}")
         self.feature_cols = non_null
 
-        # Replace inf/-inf with NaN, then fill remaining sporadic NaNs
+        # Replace inf/-inf with NaN, then fill remaining sporadic NaNs.
+        #
+        # ffill ONLY — never bfill. bfill() pulls values backward in time, so a
+        # bar's features get filled from bars that had not happened yet. The
+        # leading NaNs here are indicator warmup (SMA200 needs 200 bars), and
+        # bfill was back-filling those from future data, then the same leak
+        # crossed every walk-forward fold boundary because this runs before the
+        # split. That inflates reported AUC and makes each retrain behave
+        # unpredictably live.
+        #
+        # Rows that are still NaN after ffill are the leading warmup window;
+        # dropna below removes them, which is the causally correct choice.
         df[non_null] = df[non_null].replace([np.inf, -np.inf], np.nan)
-        df[non_null] = df[non_null].ffill().bfill()
+        df[non_null] = df[non_null].ffill()
+
+        before = len(df)
         df = df.dropna(subset=non_null + ["target"])
+        warmup_dropped = before - len(df)
+        if warmup_dropped:
+            logger.info(
+                f"Dropped {warmup_dropped} leading warmup rows "
+                f"(previously back-filled from future bars)."
+            )
         logger.info(f"Prepared {len(df)} samples with {len(non_null)} features.")
         return df
 
@@ -425,8 +444,9 @@ class MicroModelTrainer:
             logger.info(f"Dropping all-NaN micro features: {dropped}")
         self.feature_cols = non_null
 
+        # ffill only — see MacroModelTrainer.prepare_data for why bfill leaks.
         df[non_null] = df[non_null].replace([np.inf, -np.inf], np.nan)
-        df[non_null] = df[non_null].ffill().bfill()
+        df[non_null] = df[non_null].ffill()
         df = df.dropna(subset=non_null + ["target"])
         logger.info(f"Prepared {len(df)} micro samples with {len(non_null)} features.")
         return df
