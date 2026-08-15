@@ -2020,9 +2020,9 @@ def _update_position_price(pos: dict, live_prem: float):
 
 def _tick_monitor_loop():
     """
-    Background thread: reads /tmp/td_live_prices.json every second
-    and updates all open paper positions with trailing SL + auto-exit.
-    Runs only during market hours.
+    Background thread: reads the live price cache (config.settings.
+    LIVE_CACHE_FILE) every second and updates all open paper positions with
+    trailing SL + auto-exit. Runs only during market hours.
     """
     logger.info("Tick monitor thread started.")
     while True:
