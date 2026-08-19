@@ -323,14 +323,18 @@ def resolve_option_at_entry(
 
     symbol = build_option_symbol(expiry, actual_strike, opt_type)
 
-    # Find the premium at entry timestamp
+    # Find the premium at entry timestamp: most recent bar at-or-before ts,
+    # within the last minute. (Was a symmetric ±1min window taking .iloc[0]
+    # — since adjacent bars are 60s apart, that almost always matched the
+    # PRIOR bar instead of the entry bar, and could match a future bar on
+    # a gap.)
     ts = pd.to_datetime(timestamp)
-    mask = (premium_df["timestamp"] - ts).abs() <= pd.Timedelta(minutes=1)
+    mask = (premium_df["timestamp"] <= ts) & (premium_df["timestamp"] >= ts - pd.Timedelta(minutes=1))
     matching = premium_df[mask]
     if matching.empty:
         return None
 
-    entry_premium = float(matching.iloc[0]["premium"])
+    entry_premium = float(matching.iloc[-1]["premium"])
     dte = get_days_to_expiry(ref_date, expiry)
 
     return {
@@ -376,13 +380,16 @@ def resolve_option_with_vol_surface(
             pdf = load_option_premiums_for_day(sym, ref_date)
             if pdf.empty:
                 continue
-            # Get premium at timestamp
+            # Get premium at timestamp: most recent bar at-or-before ts,
+            # within the last minute (was a symmetric ±1min window that
+            # almost always matched the PRIOR bar via .iloc[0], or a future
+            # bar on a gap).
             ts = pd.to_datetime(timestamp)
-            mask = (pdf["timestamp"] - ts).abs() <= pd.Timedelta(minutes=1)
+            mask = (pdf["timestamp"] <= ts) & (pdf["timestamp"] >= ts - pd.Timedelta(minutes=1))
             matching = pdf[mask]
             if matching.empty:
                 continue
-            row = matching.iloc[0]
+            row = matching.iloc[-1]
             option_rows.append({
                 "symbol": sym,
                 "close": float(row["premium"]),
@@ -415,13 +422,16 @@ def resolve_option_with_vol_surface(
     if pdf.empty:
         return resolve_option_at_entry(index_price, timestamp, direction, strike_gap)
 
+    # Most recent bar at-or-before ts, within the last minute (was a
+    # symmetric ±1min window that almost always matched the PRIOR bar via
+    # .iloc[0], or a future bar on a gap).
     ts = pd.to_datetime(timestamp)
-    mask = (pdf["timestamp"] - ts).abs() <= pd.Timedelta(minutes=1)
+    mask = (pdf["timestamp"] <= ts) & (pdf["timestamp"] >= ts - pd.Timedelta(minutes=1))
     matching = pdf[mask]
     if matching.empty:
         return resolve_option_at_entry(index_price, timestamp, direction, strike_gap)
 
-    entry_premium = float(matching.iloc[0]["premium"])
+    entry_premium = float(matching.iloc[-1]["premium"])
     dte = get_days_to_expiry(ref_date, expiry)
 
     result = {
