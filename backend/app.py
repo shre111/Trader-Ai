@@ -2140,7 +2140,7 @@ def _tick_monitor_loop():
                                     pos["exit_premium"] = live_price
                                     pos["exit_reason"] = "REGIME_EXIT"
                                     lot = pos.get("lot_size", 65)
-                                    pos["realised_pnl"] = round((live_price - entry_prem) * lot, 2)
+                                    pos["realised_pnl"] = round((live_price - entry_prem) * lot - COMMISSION, 2)
                                     pos["unrealised_pnl"] = 0.0
                                     _persist_closed_trade(pos)
                                 elif adverse >= 0.0020 and live_price > pos["sl"]:
