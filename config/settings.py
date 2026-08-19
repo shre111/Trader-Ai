@@ -109,7 +109,12 @@ MAX_SYMBOLS = int(os.getenv("MAX_SYMBOLS", "50"))
 INITIAL_CAPITAL = float(os.getenv("INITIAL_CAPITAL", "50000"))
 RISK_PER_TRADE = float(os.getenv("RISK_PER_TRADE", "0.01"))
 MAX_TRADES_PER_DAY = int(os.getenv("MAX_TRADES_PER_DAY", "5"))
-MAX_DAILY_LOSS = float(os.getenv("MAX_DAILY_LOSS", "0.05"))
+# Fraction of capital (e.g. 0.05 = 5%), consumed by RiskManager. Distinct
+# from the MAX_DAILY_LOSS below (absolute rupees, consumed by
+# broker/order_manager.py) - these two used to share one name, with the
+# second definition silently winning, so RiskManager received -5000 where
+# it expected a fraction and rejected every trade.
+MAX_DAILY_LOSS_PCT = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.05"))
 SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD", "0.6"))
 
 # ── Model Paths ───────────────────────────────────────────────────────────────
@@ -185,6 +190,9 @@ STRAT_PROB_SCALE = 0.06             # normalize strat_prob raw output to [0,1] w
 # ── Broker Execution ─────────────────────────────────────────────────────────
 TRADE_MODE = os.getenv("TRADE_MODE", "paper")              # "paper" or "zerodha"
 ORDER_CONFIRMATION = os.getenv("ORDER_CONFIRMATION", "auto")  # "auto" or "manual"
+# Absolute rupees (e.g. -5000), consumed by broker/order_manager.py (which
+# also reads the MAX_DAILY_LOSS env var independently). See MAX_DAILY_LOSS_PCT
+# above for the fraction-of-capital version RiskManager uses.
 MAX_DAILY_LOSS = float(os.getenv("MAX_DAILY_LOSS", "-5000"))
 MAX_CONCURRENT_POSITIONS = int(os.getenv("MAX_CONCURRENT_POSITIONS", "1"))
 
