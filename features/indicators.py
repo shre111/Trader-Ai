@@ -161,8 +161,14 @@ def compute_price_indicators(df: pd.DataFrame) -> pd.DataFrame:
     # ── Session / Time Features ───────────────────────────────────────────────
     if "timestamp" in df.columns:
         ts = pd.to_datetime(df["timestamp"])
-        # Minutes since market open (09:15 IST = 03:45 UTC)
-        df["minutes_since_open"] = ts.dt.hour * 60 + ts.dt.minute - 225
+        # Minutes since market open. DB timestamps are IST wall-clock values
+        # stored mislabeled as +00:00 (see CLAUDE.md), so ts.dt.hour/minute
+        # are already IST — market open 09:15 IST is minute 555 (9*60+15) of
+        # that same clock, not 03:45 UTC. Subtracting 225 here previously
+        # treated the input as true UTC, which it never was: the computed
+        # value ranged ~330-705 across every session instead of 0-375, so
+        # is_first_hour was always 0 and is_last_hour was always 1.
+        df["minutes_since_open"] = ts.dt.hour * 60 + ts.dt.minute - 555
         df["minutes_since_open"] = df["minutes_since_open"].clip(lower=0)
         # Normalize to 0-1 (375 min session)
         df["session_progress"] = df["minutes_since_open"] / 375.0
