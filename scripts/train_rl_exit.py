@@ -86,18 +86,21 @@ def extract_premium_trajectories(trading_date: date, max_hold: int = 45) -> list
                 if pdf.empty:
                     continue
 
-                # Find entry point
-                mask = (pdf["timestamp"] - ts).abs() <= pd.Timedelta(minutes=1)
+                # Find entry point: most recent bar at-or-before ts, within
+                # the last minute (was a symmetric ±1min window that almost
+                # always matched the PRIOR bar via .iloc[0], or a future bar
+                # on a gap).
+                mask = (pdf["timestamp"] <= ts) & (pdf["timestamp"] >= ts - pd.Timedelta(minutes=1))
                 entry_rows = pdf[mask]
                 if entry_rows.empty:
                     continue
 
-                entry_prem = float(entry_rows.iloc[0]["premium"])
+                entry_prem = float(entry_rows.iloc[-1]["premium"])
                 if entry_prem <= 0 or entry_prem > 300:
                     continue
 
                 # Extract trajectory: premiums for next max_hold bars
-                entry_ts = entry_rows.iloc[0]["timestamp"]
+                entry_ts = entry_rows.iloc[-1]["timestamp"]
                 future = pdf[pdf["timestamp"] > entry_ts].head(max_hold)
                 if len(future) < 5:
                     continue

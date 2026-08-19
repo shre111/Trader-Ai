@@ -572,14 +572,17 @@ class OpenTrade:
     # Uses the corrected intra-bar exit sequence (prior_sl).
     # ──────────────────────────────────────────────────────────────────
     def _check_exit_candle(self, ts, bar_idx, bars_held, nifty_close: float):
-        mask = (self.premium_df["timestamp"] - ts).abs() <= pd.Timedelta(minutes=1)
+        # Most recent bar at-or-before ts, within the last minute (was a
+        # symmetric ±1min window that almost always matched the PRIOR bar via
+        # .iloc[0], or a future bar on a gap).
+        mask = (self.premium_df["timestamp"] <= ts) & (self.premium_df["timestamp"] >= ts - pd.Timedelta(minutes=1))
         row = self.premium_df[mask]
         if row.empty:
             return False
 
-        p_high  = float(row.iloc[0].get("high", row.iloc[0]["premium"]))
-        p_low   = float(row.iloc[0].get("low", row.iloc[0]["premium"]))
-        p_close = float(row.iloc[0]["premium"])
+        p_high  = float(row.iloc[-1].get("high", row.iloc[-1]["premium"]))
+        p_low   = float(row.iloc[-1].get("low", row.iloc[-1]["premium"]))
+        p_close = float(row.iloc[-1]["premium"])
 
         # Apply bid-side slippage — we receive bid (= close - spread) when selling
         p_high_bid  = p_high  * (1 - HALF_SPREAD_PCT)

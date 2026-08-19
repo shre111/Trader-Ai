@@ -507,15 +507,19 @@ class BacktestEngine:
                 bars_held = i - current_trade.entry_time
                 prem_df = option_info["premium_df"]
 
-                # Find premium at current timestamp
+                # Find premium at current timestamp: most recent bar at-or-before
+                # ts, within the last minute. (Was a symmetric ±1min window
+                # taking .iloc[0] — since adjacent bars are 60s apart, that
+                # almost always matched the PRIOR bar instead of the current
+                # one, and could match a future bar on a gap.)
                 ts_pd = pd.to_datetime(ts)
-                mask = (prem_df["timestamp"] - ts_pd).abs() <= pd.Timedelta(minutes=1)
+                mask = (prem_df["timestamp"] <= ts_pd) & (prem_df["timestamp"] >= ts_pd - pd.Timedelta(minutes=1))
                 prem_row = prem_df[mask]
 
                 if not prem_row.empty:
-                    prem_high = float(prem_row.iloc[0].get("high", prem_row.iloc[0]["premium"]))
-                    prem_low = float(prem_row.iloc[0].get("low", prem_row.iloc[0]["premium"]))
-                    prem_close = float(prem_row.iloc[0]["premium"])
+                    prem_high = float(prem_row.iloc[-1].get("high", prem_row.iloc[-1]["premium"]))
+                    prem_low = float(prem_row.iloc[-1].get("low", prem_row.iloc[-1]["premium"]))
+                    prem_close = float(prem_row.iloc[-1]["premium"])
 
                     entry_prem = option_info["entry_premium"]
                     prem_sl = entry_prem * (1 - sl_pct)

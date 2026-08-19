@@ -1554,14 +1554,17 @@ def run_replay(replay_date: str):
             if in_trade and current_trade and option_info:
                 entry_prem = option_info["entry_premium"]
                 prem_df = option_info["premium_df"]
+                # Most recent bar at-or-before minute_ts, within the last minute
+                # (was a symmetric ±1min window that almost always matched the
+                # PRIOR bar via .iloc[0], or a future bar on a gap).
                 ts_pd = pd.to_datetime(minute_ts)
-                mask = (prem_df["timestamp"] - ts_pd).abs() <= pd.Timedelta(minutes=1)
+                mask = (prem_df["timestamp"] <= ts_pd) & (prem_df["timestamp"] >= ts_pd - pd.Timedelta(minutes=1))
                 prem_row = prem_df[mask]
 
                 if not prem_row.empty:
-                    p_high = float(prem_row.iloc[0].get("high", prem_row.iloc[0]["premium"]))
-                    p_low = float(prem_row.iloc[0].get("low", prem_row.iloc[0]["premium"]))
-                    p_close = float(prem_row.iloc[0]["premium"])
+                    p_high = float(prem_row.iloc[-1].get("high", prem_row.iloc[-1]["premium"]))
+                    p_low = float(prem_row.iloc[-1].get("low", prem_row.iloc[-1]["premium"]))
+                    p_close = float(prem_row.iloc[-1]["premium"])
                     bars_held = idx - current_trade.get("entry_idx", 0)
 
                     exit_prem = None
