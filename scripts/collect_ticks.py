@@ -164,11 +164,19 @@ def get_option_symbols_for_today(index_price: float) -> list:
     today = date.today()
     expiry = get_nearest_expiry(today)
     if not expiry:
-        # Fallback: next Tuesday (NIFTY weekly expiry day)
-        days_ahead = 1 - today.weekday()  # Tuesday = 1
-        if days_ahead <= 0:
-            days_ahead += 7
-        expiry = today + timedelta(days=days_ahead)
+        # Both the live TrueData REST lookup and the DB fallback inside
+        # get_nearest_expiry() failed. NIFTY's weekly expiry day has moved
+        # before (Thu → Wed → Tue → Mon) and individual weeks can be
+        # holiday-shifted, so guessing "next Tuesday" here risks subscribing
+        # to the wrong week's (or an already-expired) contract - the exact
+        # hardcoded-weekday failure mode documented in CLAUDE.md. Fail
+        # closed: skip option subscription this cycle rather than guess.
+        logger.error(
+            "get_option_symbols_for_today: no expiry available (live REST "
+            "and DB fallback both failed) - skipping option subscription "
+            "this cycle rather than guessing a weekday."
+        )
+        return []
 
     gap = STRIKE_GAP.get("NIFTY", 50)
     atm = round(index_price / gap) * gap
