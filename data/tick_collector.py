@@ -73,10 +73,13 @@ class TickCollector:
         try:
             write_df(df[cols], "tick_data")
             logger.info(f"Flushed {len(self._buffer)} ticks to database.")
+            self._buffer.clear()
         except Exception as e:
+            # Keep the buffer intact on failure so a transient DB error
+            # (e.g. a dropped connection) doesn't silently drop up to
+            # buffer_size ticks with no retry - they'll be retried on the
+            # next flush() trigger instead.
             logger.error(f"Failed to flush ticks: {e}")
-
-        self._buffer.clear()
 
     def add_listener(self, callback: Callable):
         """Register a callback that receives every tick dict."""
