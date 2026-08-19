@@ -85,6 +85,15 @@ SELECT create_hypertable('minute_candles', 'timestamp', if_not_exists => TRUE);
 
 CREATE INDEX IF NOT EXISTS idx_minute_symbol_ts ON minute_candles (symbol, timestamp DESC);
 
+-- database.db.upsert_candles() does INSERT ... ON CONFLICT (timestamp, symbol)
+-- DO NOTHING, which requires a unique index/constraint on exactly those
+-- columns - the plain index above doesn't satisfy that. Without this, every
+-- upsert_candles() call on a freshly-initialized DB (init_db() just runs
+-- this file) fails with "no unique or exclusion constraint matching the
+-- ON CONFLICT specification". Valid on a hypertable since it includes the
+-- partitioning column (timestamp).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_minute_candles_ts_symbol ON minute_candles (timestamp, symbol);
+
 -- ── 5-Minute Candles (regime detection timeframe) ────────────────────────────
 CREATE TABLE IF NOT EXISTS five_minute_candles (
     timestamp   TIMESTAMPTZ     NOT NULL,
