@@ -91,7 +91,24 @@ def compute_price_indicators(df: pd.DataFrame) -> pd.DataFrame:
     # "Weekly" slope on a 1-min chart ≈ 375 bars/day × 5 days = 1875 bars.
     # A full week of history is rarely available intraday, so use 300 bars
     # (~1 trading day) as a pragmatic multi-session trend slope.
-    df["weekly_trend_slope"] = df["close"].diff(300) / df["close"].shift(300).replace(0, np.nan)
+    #
+    # diff(300)/shift(300) need 301 rows for the LAST row to be non-NaN.
+    # Training sees the full historical dataset, so this only drops the
+    # first ~300 rows there. But every live/backtest caller feeds this
+    # function a buffer capped at exactly 300 rows (14 call sites across
+    # the codebase all use LIMIT 300 / .tail(300)) - so the one row that
+    # actually matters at scoring time, the latest bar, was ALWAYS NaN,
+    # silently hitting XGBoost's untrained missing-value routing on every
+    # single live/backtest prediction. Rather than change every call site's
+    # buffer size (and risk them drifting out of sync with each other),
+    # shrink the window here when the input is short - 299 vs 300 bars of
+    # multi-session trend is a negligible difference, and it degrades
+    # gracefully instead of guaranteeing NaN at exactly the boundary.
+    _slope_window = min(300, max(1, len(df) - 1))
+    df["weekly_trend_slope"] = (
+        df["close"].diff(_slope_window)
+        / df["close"].shift(_slope_window).replace(0, np.nan)
+    )
     # Pullback-in-uptrend: 1 when market is in an uptrend (close > ema50,
     # ema20 > ema50) AND the last bar pulled back (close < open). This is the
     # exact context where bearish_momentum PUT entries have historically lost.
