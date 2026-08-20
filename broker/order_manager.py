@@ -93,7 +93,13 @@ class OrderManager:
         self._halted: bool = False      # set by kill switch or max loss
         self._halt_reason: str = ""
         self._pending_signals: list[dict] = []  # for manual confirmation mode
-        self._lock = threading.Lock()
+        # RLock, not Lock: check_sl_target() and kill_switch() both hold
+        # this lock while calling exit_position(), which acquires it again.
+        # A plain Lock deadlocks forever on that second acquire from the
+        # same thread (no exception - it just hangs). kill_switch() is
+        # wired to the emergency-stop route, so that deadlock froze the
+        # "close everything now" safety feature instead of running it.
+        self._lock = threading.RLock()
 
         logger.info(f"OrderManager initialized: mode={self._mode}, "
                     f"max_loss=₹{self._max_daily_loss}, max_concurrent={self._max_concurrent}, "
