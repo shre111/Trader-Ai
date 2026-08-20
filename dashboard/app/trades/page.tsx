@@ -162,7 +162,7 @@ function LiveTradeRows({ trades }: { trades: LiveTrade[] }) {
 }
 
 // ── Backtest trade rows with inline journey ──────────────────────────────────
-function BacktestTradeRows({ trades, risk }: { trades: Trade[]; risk: RiskLevel }) {
+function BacktestTradeRows({ trades, risk }: { trades: Array<Trade & { origIndex: number }>; risk: RiskLevel }) {
   const [journeyIdx, setJourneyIdx] = useState<number | null>(null);
   const [journeyData, setJourneyData] = useState<{ journey: JourneyPoint[]; entry_premium: number; initial_sl: number; target: number; symbol: string } | null>(null);
   const [loadingJourney, setLoadingJourney] = useState(false);
@@ -198,7 +198,7 @@ function BacktestTradeRows({ trades, risk }: { trades: Trade[]; risk: RiskLevel 
   return (
     <>
       {[...trades].reverse().map((t, i) => {
-        const origIdx = trades.length - 1 - i; // original 0-based index for journey lookup
+        const origIdx = t.origIndex; // true index in the unfiltered trade list, for journey lookup
         return (
           <React.Fragment key={i}>
             <tr>
@@ -301,15 +301,23 @@ export default function TradesPage() {
   useEffect(() => { loadBacktest(risk); }, [risk, loadBacktest]);
   useEffect(() => { if (tabMode === "live") loadLive(); }, [tabMode, loadLive]);
 
-  // Filtered backtest trades
-  const filteredBt = btTrades.filter(t => {
-    if (filter === "ALL") return true;
-    if (filter === "CALL" || filter === "PUT") return t.direction === filter;
-    if (filter === "WIN") return t.pnl > 0;
-    if (filter === "LOSS") return t.pnl <= 0;
-    if (filter === "RL_EXIT") return t.result === "RL_EXIT" || t.result === "DQN_EXIT";
-    return true;
-  });
+  // Filtered backtest trades. Each trade carries its index in the
+  // UNFILTERED btTrades array (origIndex) - that's what
+  // /api/backtest/journey/<risk>/<trade_idx> indexes into (it reads
+  // journeys_{risk}_risk.json positionally, unaware of any UI filter).
+  // Recomputing an index from the filtered array's own length/position
+  // (as this used to do) points at the wrong trade's journey whenever a
+  // filter is active.
+  const filteredBt: Array<Trade & { origIndex: number }> = btTrades
+    .map((t, origIndex) => ({ ...t, origIndex }))
+    .filter(t => {
+      if (filter === "ALL") return true;
+      if (filter === "CALL" || filter === "PUT") return t.direction === filter;
+      if (filter === "WIN") return t.pnl > 0;
+      if (filter === "LOSS") return t.pnl <= 0;
+      if (filter === "RL_EXIT") return t.result === "RL_EXIT" || t.result === "DQN_EXIT";
+      return true;
+    });
 
   // Filtered live trades
   const filteredLive = liveTrades.filter(t => {
