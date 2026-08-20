@@ -11,15 +11,39 @@ const riskColors: Record<string, string> = { low: "#06b6d4", medium: "#8b5cf6", 
 
 export default function SettingsPage() {
   const [profiles, setProfiles] = useState<Record<RiskLevel, RiskProfile> | null>(null);
-  const [activeRisk, setActiveRisk] = useState<RiskLevel>("medium");
+  const [activeRisk, setActiveRiskState] = useState<RiskLevel>("medium");
+  const [switchingRisk, setSwitchingRisk] = useState(false);
+  const [riskSwitchError, setRiskSwitchError] = useState<string | null>(null);
   const [runMsg, setRunMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null);
 
   const load = useCallback(async () => {
     const p = await fetchJSON<Record<RiskLevel, RiskProfile>>("/api/risk/profiles").catch(() => null);
     if (p) setProfiles(p as Record<RiskLevel, RiskProfile>);
+
+    // Initialize from the LIVE scanner's actual active profile, not a
+    // hardcoded default - this used to only ever reflect local UI state,
+    // so switching cards here never changed what the scanner traded with.
+    const active = await fetchJSON<{ level: RiskLevel }>("/api/risk/active").catch(() => null);
+    if (active) setActiveRiskState(active.level);
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const selectActiveRisk = async (r: RiskLevel) => {
+    const previous = activeRisk;
+    setActiveRiskState(r);   // optimistic — most switches succeed
+    setSwitchingRisk(true);
+    setRiskSwitchError(null);
+    try {
+      const result = await postJSON<{ level: RiskLevel }>("/api/risk/active", { level: r });
+      setActiveRiskState(result.level);
+    } catch (e: unknown) {
+      setActiveRiskState(previous);  // roll back — the scanner didn't switch
+      setRiskSwitchError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSwitchingRisk(false);
+    }
+  };
 
   const runBacktest = async () => {
     setRunMsg(null);
@@ -45,6 +69,7 @@ export default function SettingsPage() {
           <h2 className="text-[12px] font-bold uppercase tracking-wider mb-1" style={{ color: '#e8eeff' }}>Risk Profile</h2>
           <p className="text-[10px] mb-4" style={{ color: '#5e7299' }}>
             Controls lot size, stop-loss, targets, max trades, and premium caps.
+            Selecting a card switches the LIVE scanner's active profile.
           </p>
 
           {profiles ? (
@@ -55,12 +80,21 @@ export default function SettingsPage() {
                   level={r}
                   profile={profiles[r]}
                   active={activeRisk === r}
-                  onSelect={setActiveRisk}
+                  onSelect={selectActiveRisk}
                 />
               ))}
             </div>
           ) : (
             <div className="text-[11px]" style={{ color: '#2e3a5e' }}>LOADING...</div>
+          )}
+
+          {switchingRisk && (
+            <div className="text-[11px] mb-2" style={{ color: '#5e7299' }}>SWITCHING LIVE PROFILE...</div>
+          )}
+          {riskSwitchError && (
+            <div className="mb-3 px-3 py-2 text-[11px]" style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', color: '#f43f5e' }}>
+              ⚠ Failed to switch live profile: {riskSwitchError}
+            </div>
           )}
 
           <div className="flex items-center gap-3 mt-3">
