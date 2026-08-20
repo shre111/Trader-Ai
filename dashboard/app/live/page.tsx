@@ -31,6 +31,7 @@ export default function LivePage() {
   const [entering, setEntering] = useState<string | null>(null);
   const [exiting, setExiting] = useState<number | null>(null);
   const [enterError, setEnterError] = useState<string | null>(null);
+  const [exitError, setExitError] = useState<string | null>(null);
   const [tickCacheAge, setTickCacheAge] = useState<number | null>(null);
   const [livePrices, setLivePrices] = useState<Record<string, { price: number; ts: string }>>({});
   const [sseConnected, setSseConnected] = useState(false);
@@ -121,8 +122,15 @@ export default function LivePage() {
 
   const handleExit = async (id: number) => {
     setExiting(id);
-    try { await exitPaperTrade(id, mode); }
-    finally { setExiting(null); }
+    setExitError(null);
+    try {
+      await exitPaperTrade(id, mode);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setExitError(msg);
+    } finally {
+      setExiting(null);
+    }
   };
 
   const handleClear = async () => {
@@ -269,6 +277,11 @@ export default function LivePage() {
                 Unrealised: ₹{totalOpenPnl.toLocaleString("en-IN")}
               </span>
             </div>
+            {exitError && (
+              <div className="mb-3 px-3 py-2 text-[11px]" style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.3)', color: '#f43f5e' }}>
+                ⚠ Exit failed: {exitError}
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table>
                 <thead>
