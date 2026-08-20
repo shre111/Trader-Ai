@@ -436,11 +436,19 @@ export default function ChartsPage() {
 
   useEffect(() => {
     if (!selectedOption || !selectedDate) return;
+    // Guard against a fetch race: if the user picks a different contract
+    // before this request resolves, and the requests resolve out of
+    // order, an unguarded setOptionTicks would overwrite the correct
+    // (later-selected) data with the stale (earlier-selected) response,
+    // while the header still shows the newly-selected symbol - chart and
+    // title would belong to two different contracts.
+    let cancelled = false;
     setLoadingTicks(true);
     fetchJSON<OptionTickData>(`/api/options/ticks?symbol=${selectedOption}&date=${selectedDate}`)
-      .then(setOptionTicks)
-      .catch(() => setOptionTicks(null))
-      .finally(() => setLoadingTicks(false));
+      .then(data => { if (!cancelled) setOptionTicks(data); })
+      .catch(() => { if (!cancelled) setOptionTicks(null); })
+      .finally(() => { if (!cancelled) setLoadingTicks(false); });
+    return () => { cancelled = true; };
   }, [selectedOption, selectedDate]);
 
   const parseSymbol = (sym: string) => {
