@@ -48,7 +48,25 @@ BACKTEST_CSVS = [
     Path("backtest_results/trades_low_risk.csv"),
 ]
 
-WIN_RESULTS = {"TRAILING_SL", "TIMEOUT", "RL_EXIT", "EOD_CLOSE", "TARGET", "WIN"}
+# Only exit reasons that are profitable BY CONSTRUCTION belong here.
+# TARGET means the price hit a target strictly above entry - always a win.
+# TRAILING_SL only ever ratchets the stop above entry once profit clears
+# TRAIL_ACTIVATE_PCT (10%), so a trailing-stop exit fills above entry too.
+#
+# TIMEOUT and RL_EXIT were previously included, but neither guarantees a
+# profitable fill: TIMEOUT (tick_replay_backtest.py) fires purely on
+# bars_held >= MAX_HOLD_BARS after failing the SL/target checks, landing
+# anywhere between SL and target, including underwater. RL_EXIT fires
+# whenever the RL agent's policy picks "EXIT", filling at whatever the
+# current premium is - it has no profit floor; deciding to cut a loser is
+# exactly the kind of call an exit-timing agent should be free to make.
+# EOD_CLOSE force-closes at day end regardless of price and was already
+# falling through to the pnl>0 check below correctly.
+#
+# Labeling TIMEOUT/RL_EXIT as WIN=1 regardless of actual P&L corrupted
+# training labels for every per-strategy outcome model - a losing timeout
+# or RL exit taught the model that the conditions preceding it were a win.
+WIN_RESULTS = {"TRAILING_SL", "TARGET", "WIN"}
 
 
 def _parse_entry_time(ts_str: str) -> pd.Timestamp:
