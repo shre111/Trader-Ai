@@ -167,23 +167,25 @@ def _persist_closed_trade(pos: dict):
         logger.warning(f"Failed to persist trade {pos.get('id')}: {e}")
 
     # ── Consecutive SL tracking (ported from backtest 2026-04-15) ────────
-    # Count consecutive SL_HIT exits. After 2 in a row, pause new entries
-    # for 30 minutes. Any non-SL exit (trailing, target, RL, timeout, manual)
-    # resets the counter.
+    # Count consecutive SL_HIT exits, per trading mode. After 2 in a row,
+    # pause new entries for that mode for 30 minutes. Any non-SL exit
+    # (trailing, target, RL, timeout, manual) resets that mode's counter.
+    # Keyed by mode so SL hits in "live" don't pause "test"'s auto-trader
+    # (and vice versa) — the two are otherwise fully mode-isolated.
     global _consecutive_sl_hits, _sl_pause_until
     reason = pos.get("exit_reason", "")
     if reason == "SL_HIT":
-        _consecutive_sl_hits += 1
-        if _consecutive_sl_hits >= 2:
-            _sl_pause_until = datetime.now() + timedelta(minutes=30)
+        _consecutive_sl_hits[mode] = _consecutive_sl_hits.get(mode, 0) + 1
+        if _consecutive_sl_hits[mode] >= 2:
+            _sl_pause_until[mode] = datetime.now() + timedelta(minutes=30)
             logger.warning(
-                f"SL COOLDOWN ACTIVATED: {_consecutive_sl_hits} consecutive SL hits — "
-                f"pausing entries until {_sl_pause_until.strftime('%H:%M')}"
+                f"SL COOLDOWN ACTIVATED ({mode}): {_consecutive_sl_hits[mode]} consecutive SL hits — "
+                f"pausing entries until {_sl_pause_until[mode].strftime('%H:%M')}"
             )
     else:
-        if _consecutive_sl_hits > 0:
-            logger.debug(f"SL streak broken ({reason}): counter reset")
-        _consecutive_sl_hits = 0
+        if _consecutive_sl_hits.get(mode, 0) > 0:
+            logger.debug(f"SL streak broken ({mode}, {reason}): counter reset")
+        _consecutive_sl_hits[mode] = 0
 
 
 def _get_mode_positions(mode: str = None) -> list:
@@ -586,11 +588,12 @@ TICK_STALENESS_THRESHOLD_SECS = 120
 _last_tick_backfill_run = 0.0
 _TICK_BACKFILL_MIN_INTERVAL = 60.0
 
-# Consecutive SL tracking (ported from backtest 2026-04-15). After 2
-# consecutive SL hits, pause new entries for 30 minutes. Resets on any
-# non-SL exit (trailing, target, RL, timeout).
-_consecutive_sl_hits: int = 0
-_sl_pause_until: datetime = datetime.min
+# Consecutive SL tracking (ported from backtest 2026-04-15), per trading
+# mode. After 2 consecutive SL hits in a mode, pause new entries for that
+# mode for 30 minutes. Resets on any non-SL exit (trailing, target, RL,
+# timeout). Keyed by mode ("test"/"live") so the two don't pause each other.
+_consecutive_sl_hits: dict = {"test": 0, "live": 0}
+_sl_pause_until: dict = {"test": datetime.min, "live": datetime.min}
 
 # Per-(strategy, direction) entry cooldown to prevent ladder entries on the
 # same exhausted move. Apr 28 fired 5 bearish_momentum PUTs within 65 min,
@@ -944,9 +947,13 @@ def scan_market():
         # ── Consecutive-SL cooldown (added 2026-04-15, ported from backtest) ─
         # After 2 SL hits in a row, pause new entries for 30 minutes. Resets
         # on any non-SL exit. Prevents the 4-SL-cluster pattern from today.
+        # scan_market's auto-entry only ever trades "test" mode (see
+        # _auto_enter_position call below), so gate on "test"'s cooldown —
+        # SL hits on manually-entered "live" positions must not pause this.
         global _consecutive_sl_hits, _sl_pause_until
-        if datetime.now() < _sl_pause_until:
-            remaining = int((_sl_pause_until - datetime.now()).total_seconds() / 60)
+        _test_pause_until = _sl_pause_until.get("test", datetime.min)
+        if datetime.now() < _test_pause_until:
+            remaining = int((_test_pause_until - datetime.now()).total_seconds() / 60)
             logger.info(f"SKIP all signals: SL cooldown active ({remaining}min remaining)")
             return
 
