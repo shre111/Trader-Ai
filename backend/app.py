@@ -1016,7 +1016,11 @@ def scan_market():
             # Was hardcoded to MEDIUM; now follows the active profile so the
             # score floor and the time gate above can never disagree.
             _active_profile = get_active_profile()
-            effective_threshold = max(0.75, SCORE_THRESHOLD, _active_profile.put_score_threshold)
+            _direction_threshold = (
+                _active_profile.put_score_threshold if sig.direction == "PUT"
+                else _active_profile.score_threshold
+            )
+            effective_threshold = max(0.75, SCORE_THRESHOLD, _direction_threshold)
 
             # Strategy-specific gates (evidence from backtest with real slippage)
             if sig.strategy == "bearish_momentum" and sig.direction == "PUT":
