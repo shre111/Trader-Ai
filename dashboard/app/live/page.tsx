@@ -297,7 +297,7 @@ export default function LivePage() {
                     const tickEntry = livePrices[p.symbol];
                     const currentPrem = (tickEntry && tickCacheAge !== null && tickCacheAge < 30)
                       ? tickEntry.price
-                      : p.current_premium;
+                      : (p.current_premium ?? p.entry_premium);
                     const unrealisedPnl = Math.round((currentPrem - p.entry_premium) * p.lot_size - 40);
                     const pnlColor = unrealisedPnl >= 0 ? '#10b981' : '#f43f5e';
                     const pct = ((currentPrem - p.entry_premium) / p.entry_premium * 100);
