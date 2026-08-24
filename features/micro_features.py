@@ -56,9 +56,13 @@ def compute_micro_features(
 
     # Classify trades as buy/sell using tick rule
     # price >= ask → buyer initiated, price <= bid → seller initiated
-    df["_is_buy"] = (df["price"] >= df["ask_price"]).astype(int)
-    df["_buy_vol"] = df["volume"] * df["_is_buy"]
-    df["_sell_vol"] = df["volume"] * (1 - df["_is_buy"])
+    # Ticks with no real bid/ask (illiquid strikes, REST-backfilled ticks)
+    # have nothing to classify against — exclude them instead of defaulting
+    # to "buy" (price >= 0 is always true) or "sell" (NaN comparison is false).
+    has_quote = (df["bid_price"] > 0) & (df["ask_price"] > 0)
+    df["_is_buy"] = (has_quote & (df["price"] >= df["ask_price"])).astype(int)
+    df["_buy_vol"] = df["volume"] * df["_is_buy"] * has_quote
+    df["_sell_vol"] = df["volume"] * (1 - df["_is_buy"]) * has_quote
 
     # ── Resample to 1-second bars ─────────────────────────────────────────────
 
