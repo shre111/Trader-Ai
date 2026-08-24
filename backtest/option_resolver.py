@@ -340,7 +340,7 @@ def resolve_option_at_entry(
     return {
         "symbol": symbol,
         "expiry": expiry,
-        "strike": atm,
+        "strike": actual_strike,
         "opt_type": opt_type,
         "entry_premium": entry_premium,
         "dte": dte,
