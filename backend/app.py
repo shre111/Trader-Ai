@@ -2331,10 +2331,12 @@ def api_paper_enter():
         0.15 if final_score >= 0.65 else
         0.12
     )
+    # Tiers match scan_market()'s live targets (lowered 2026-04-08 from
+    # 70/55/40 — most moves exhaust before hitting the old, higher targets).
     target_pct = body.get("target_pct") or (
-        0.70 if final_score >= 0.75 else
-        0.55 if final_score >= 0.65 else
-        0.40
+        0.55 if final_score >= 0.75 else
+        0.45 if final_score >= 0.65 else
+        0.35
     )
     initial_sl = round(ep * (1 - sl_pct), 2)
     lots = _lots_for_score(final_score)
