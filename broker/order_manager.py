@@ -263,8 +263,8 @@ class OrderManager:
                 entry_time=datetime.now(),
                 entry_price=fill_price,
                 quantity=quantity,
-                sl_price=signal.get("sl_price", fill_price * 0.85),
-                target_price=signal.get("target_price", fill_price * 1.50),
+                sl_price=signal.get("sl_price") or fill_price * 0.85,
+                target_price=signal.get("target_price") or fill_price * 1.50,
                 final_score=signal.get("final_score", 0),
                 ml_prob=signal.get("ml_prob", 0),
             )
