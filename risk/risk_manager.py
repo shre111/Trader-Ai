@@ -31,6 +31,8 @@ from utils.logger import get_logger
 
 logger = get_logger("risk_manager")
 
+LOT_SIZE = 65  # NIFTY options lot size — quantities must be whole multiples
+
 
 @dataclass
 class RiskDecision:
@@ -137,7 +139,11 @@ class RiskManager:
                 rejection_reason="Invalid stop distance (ATR=0)",
             )
 
-        quantity = max(1, int(risk_amount / stop_distance))
+        # NIFTY options only trade in multiples of the 65-share lot size —
+        # round down to whole lots (floor of 1 lot) rather than a raw share
+        # count, which would produce an unbuyable quantity like 27.
+        lots = max(1, int(risk_amount / stop_distance / LOT_SIZE))
+        quantity = lots * LOT_SIZE
 
         # Calculate SL and target
         if direction == "CALL":
@@ -243,4 +249,5 @@ def calculate_position_size(balance: float, stop_distance: float) -> int:
     risk_amount = balance * RISK_PER_TRADE
     if stop_distance <= 0:
         return 0
-    return int(risk_amount / stop_distance)
+    lots = max(1, int(risk_amount / stop_distance / LOT_SIZE))
+    return lots * LOT_SIZE
