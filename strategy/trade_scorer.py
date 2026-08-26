@@ -137,7 +137,10 @@ class TradeScorer:
 
         Args:
             signals: list of Signal objects from strategy engine
-            ml_probabilities: {symbol: probability} from Predictor
+            ml_probabilities: {symbol: probability} of a BULLISH move from
+                Predictor. PUT signals get this inverted (1 - prob) before
+                scoring, since a low bullish probability is exactly what
+                makes a PUT attractive.
             flow_scores: {symbol: flow_score} from OptionsFlowDetector
             regime: current market regime, either a single string applied to
                 every signal or a {symbol: regime} dict for per-symbol regime
@@ -151,10 +154,11 @@ class TradeScorer:
         scored = []
         for sig in signals:
             ml_prob = ml_probabilities.get(sig.symbol, 0.5)
+            directional_prob = ml_prob if sig.direction == "CALL" else (1.0 - ml_prob)
             flow = flow_scores.get(sig.symbol, 0.0)
             sig_regime = regime.get(sig.symbol, "") if isinstance(regime, dict) else regime
 
-            trade = self.score_signal(sig, ml_prob, flow, sig_regime)
+            trade = self.score_signal(sig, directional_prob, flow, sig_regime)
             scored.append(trade)
 
         # Sort by score descending
