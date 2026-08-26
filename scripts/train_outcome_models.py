@@ -101,8 +101,14 @@ def load_trades() -> pd.DataFrame:
 
     all_trades = pd.concat(dfs, ignore_index=True)
     before = len(all_trades)
+    # The same signal commonly fires across all three risk-profile backtests,
+    # but each profile has its own SL/target, so the actual outcome (result,
+    # pnl) can legitimately differ between profiles for what looks like "the
+    # same trade" on entry-setup columns alone. Including result/pnl in the
+    # dedup key keeps each profile's own label instead of silently discarding
+    # medium/low's outcome whenever high's (loaded first) looked identical.
     all_trades = all_trades.drop_duplicates(
-        subset=["entry_time", "symbol", "direction", "entry_premium"]
+        subset=["entry_time", "symbol", "direction", "entry_premium", "result", "pnl"]
     )
     logger.info(f"  Deduplicated: {before} → {len(all_trades)} trades")
     return all_trades
