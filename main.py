@@ -395,6 +395,8 @@ def run_live():
             all_signals = []
             ml_probs = {}
             flow_scores = {}
+            latest_by_symbol = {}
+            regime_by_symbol = {}
 
             for symbol in SYMBOLS:
                 # 1. Build latest features
@@ -403,6 +405,7 @@ def run_live():
                     continue
 
                 latest = macro_df.iloc[-1].to_dict()
+                latest_by_symbol[symbol] = latest
 
                 # 2. Detect market regime (from 5m candles)
                 fivemin_df = read_sql(
@@ -411,6 +414,7 @@ def run_live():
                     {"sym": symbol},
                 )
                 regime = regime_detector.detect(fivemin_df)
+                regime_by_symbol[symbol] = regime
                 active_strats = get_strategies_for_regime(regime)
 
                 # 3. Generate signals
@@ -433,13 +437,17 @@ def run_live():
                 all_signals.extend(signals)
 
             # 6. Rank and select top trades
+            # regime is per-symbol since each symbol's signals were filtered
+            # by that symbol's own regime — a single scalar here would tag
+            # every trade with whichever symbol happened to be last in the loop.
+            regime_values = {sym: r.value for sym, r in regime_by_symbol.items()}
             top_trades = scorer.rank_trades(
-                all_signals, ml_probs, flow_scores, regime.value
+                all_signals, ml_probs, flow_scores, regime_values
             )
 
             # 7. Execute approved trades
             for scored_trade in top_trades:
-                atr = latest.get("atr", 0)
+                atr = latest_by_symbol.get(scored_trade.symbol, {}).get("atr", 0)
                 risk_decision = risk_mgr.validate_trade(
                     symbol=scored_trade.symbol,
                     entry_price=scored_trade.entry_price,
