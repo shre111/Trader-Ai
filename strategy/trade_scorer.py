@@ -18,7 +18,7 @@ From the Product Vision doc (§12, §13):
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 from config.settings import (
     SCORE_THRESHOLD,
@@ -130,7 +130,7 @@ class TradeScorer:
         signals: List[Signal],
         ml_probabilities: Dict[str, float] = None,
         flow_scores: Dict[str, float] = None,
-        regime: str = "",
+        regime: Union[str, Dict[str, str]] = "",
     ) -> List[ScoredTrade]:
         """
         Score all signals and return ranked list (top N above threshold).
@@ -139,7 +139,8 @@ class TradeScorer:
             signals: list of Signal objects from strategy engine
             ml_probabilities: {symbol: probability} from Predictor
             flow_scores: {symbol: flow_score} from OptionsFlowDetector
-            regime: current market regime
+            regime: current market regime, either a single string applied to
+                every signal or a {symbol: regime} dict for per-symbol regime
 
         Returns list of ScoredTrade sorted by final_score descending,
         filtered by threshold, limited to max_trades.
@@ -151,8 +152,9 @@ class TradeScorer:
         for sig in signals:
             ml_prob = ml_probabilities.get(sig.symbol, 0.5)
             flow = flow_scores.get(sig.symbol, 0.0)
+            sig_regime = regime.get(sig.symbol, "") if isinstance(regime, dict) else regime
 
-            trade = self.score_signal(sig, ml_prob, flow, regime)
+            trade = self.score_signal(sig, ml_prob, flow, sig_regime)
             scored.append(trade)
 
         # Sort by score descending
